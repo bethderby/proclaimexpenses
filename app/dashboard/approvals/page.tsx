@@ -20,7 +20,7 @@ export default async function ApprovalsPage() {
 
   return (
     <div>
-      <h2 className="font-serif text-2xl font-semibold text-stone-900 tracking-tight mb-1">Approvals</h2>
+      <h2 className="text-2xl font-semibold text-stone-900 tracking-tight mb-1">Approvals</h2>
       <p className="text-sm text-stone-500 mb-6">Pending requests for teams you approve.</p>
       {items.length === 0 ? (
         <div className="border border-dashed border-stone-300 rounded-lg py-14 text-center text-sm text-stone-400">

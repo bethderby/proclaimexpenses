@@ -1,0 +1,22 @@
+import { getServerSession } from 'next-auth';
+import { redirect } from 'next/navigation';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import StatusPill from '@/components/StatusPill';
+
+const fmt=(n:number)=>`£${n.toFixed(2)}`;
+export default async function DashboardPage(){
+ const session=await getServerSession(authOptions); if(!session?.user)redirect('/login'); const user=session.user as any;
+ const [requests,expenses,pending]=await Promise.all([
+  prisma.fundingRequest.findMany({where:{userId:user.id},include:{team:true},orderBy:{submittedAt:'desc'},take:5}),
+  prisma.expense.findMany({where:{userId:user.id},include:{team:true},orderBy:{submittedAt:'desc'},take:5}),
+  user.isAdmin ? prisma.fundingRequest.count({where:{status:'PENDING'}}) : user.isApprover ? prisma.fundingRequest.count({where:{status:'PENDING',team:{approverEmail:{equals:user.email,mode:'insensitive'}}}}) : Promise.resolve(0)
+ ]);
+ const requestTotal=requests.reduce((s,r)=>s+(r.status!=='REJECTED'?r.amount:0),0); const expenseTotal=expenses.reduce((s,e)=>s+e.amount,0);
+ return <div className="space-y-6 sm:space-y-8"><div><p className="text-sm font-semibold text-emerald-600">Overview</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Good to see you, {user.name?.split(' ')[0] || 'there'}.</h1><p className="mt-2 max-w-2xl text-sm text-slate-500">See what needs your attention and keep your spending moving.</p></div>
+  <div className="grid gap-4 sm:grid-cols-3"><div className="rounded-2xl bg-slate-950 p-5 text-white"><p className="text-xs text-slate-300">Requests</p><p className="mt-2 text-3xl font-bold">{requests.length}</p><p className="mt-1 text-xs text-slate-400">{fmt(requestTotal)} approved or pending</p></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs text-slate-500">Expenses logged</p><p className="mt-2 text-3xl font-bold text-slate-950">{expenses.length}</p><p className="mt-1 text-xs text-slate-500">{fmt(expenseTotal)} in recent expenses</p></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs text-slate-500">Waiting for you</p><p className="mt-2 text-3xl font-bold text-slate-950">{pending}</p><p className="mt-1 text-xs text-slate-500">requests to review</p></div></div>
+  <div className="grid gap-6 lg:grid-cols-2"><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><h2 className="font-semibold text-slate-950">Recent requests</h2><p className="text-xs text-slate-500">Your latest funding requests</p></div><a href="/dashboard/my-requests" className="text-xs font-semibold text-emerald-700">View all</a></div><div className="mt-4 divide-y divide-slate-100">{requests.length===0?<p className="py-8 text-sm text-slate-500">No requests yet.</p>:requests.map(r=><div key={r.id} className="flex items-center gap-3 py-3"><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-900">{r.description}</p><p className="text-xs text-slate-500">{r.team.name}</p></div><span className="text-sm font-bold text-slate-900">{fmt(r.amount)}</span><StatusPill status={r.status}/></div>)}</div></section>
+  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><h2 className="font-semibold text-slate-950">Recent expenses</h2><p className="text-xs text-slate-500">Your latest logged purchases</p></div><a href="/dashboard/expenses" className="text-xs font-semibold text-emerald-700">View all</a></div><div className="mt-4 divide-y divide-slate-100">{expenses.length===0?<p className="py-8 text-sm text-slate-500">No expenses yet.</p>:expenses.map(e=><div key={e.id} className="flex items-center gap-3 py-3"><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-900">{e.description}</p><p className="text-xs text-slate-500">{e.team.name}</p></div><span className="text-sm font-bold text-slate-900">{fmt(e.amount)}</span></div>)}</div></section></div>
+  <div className="flex flex-wrap gap-3"><a href="/dashboard/submit" className="rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800">New request</a><a href="/dashboard/expenses" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">Log an expense</a></div>
+ </div>;
+}

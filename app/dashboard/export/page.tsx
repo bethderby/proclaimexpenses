@@ -12,7 +12,7 @@ export default async function ExportPage() {
 
   return (
     <div>
-      <h2 className="font-serif text-2xl font-semibold text-stone-900 tracking-tight mb-1">Export</h2>
+      <h2 className="text-2xl font-semibold text-stone-900 tracking-tight mb-1">Export</h2>
       <p className="text-sm text-stone-500 mb-6">Export data or create a consolidated report for any date range.</p>
       <ExportControls teams={teams.map((t) => ({ id: t.id, name: t.name }))} isAdmin={!!(session.user as any).isAdmin} />
     </div>

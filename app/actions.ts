@@ -6,6 +6,8 @@ import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
+function escapeHtml(value: string) { return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] || char)); }
+
 async function requireUser() {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect('/login');
@@ -48,12 +50,15 @@ export async function submitRequest(formData: FormData) {
     try {
       const { Resend } = await import('resend');
       const resend = new Resend(process.env.RESEND_API_KEY);
-      const requester = user.name || user.email || 'A team member';
+      const requester = escapeHtml(user.name || user.email || 'A team member');
+      const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+      const approvalUrl = `${appUrl}/dashboard/approvals`;
       const result = await resend.emails.send({
         from: process.env.RESEND_FROM,
         to: team.approverEmail,
         subject: `Expense request needs approval — £${amount.toFixed(2)}`,
-        text: `${requester} submitted a £${amount.toFixed(2)} request for ${team.name}.\n\n${description}\n\nOpen Proclaim Expenses to approve or reject it.`,
+        html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a"><h2 style="margin-bottom:8px">New expense request</h2><p style="color:#64748b">${requester} submitted a request for <strong>${escapeHtml(team.name)}</strong>.</p><div style="padding:18px;border:1px solid #e2e8f0;border-radius:14px;margin:20px 0"><p style="margin:0 0 8px;font-size:20px;font-weight:700">£${amount.toFixed(2)}</p><p style="margin:0;color:#475569">${escapeHtml(description)}</p></div>${approvalUrl ? `<a href="${approvalUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Review request</a>` : '<p>Open Proclaim Expenses to review the request.</p>'}<p style="margin-top:28px;font-size:12px;color:#94a3b8">Proclaim Expenses</p></div>`,
+        text: `${requester} submitted a £${amount.toFixed(2)} request for ${escapeHtml(team.name)}.\n\n${escapeHtml(description)}\n\n${approvalUrl || 'Open Proclaim Expenses to approve or reject it.'}`,
       });
       if (result.error) console.error('Approver notification failed', result.error);
     } catch (error) {
@@ -111,9 +116,33 @@ export async function submitExpense(formData: FormData) {
   redirect('/dashboard/expenses');
 }
 
+export async function updateExpense(formData: FormData) {
+  const user = await requireUser();
+  const expenseId = String(formData.get('expenseId') || '');
+  const teamId = String(formData.get('teamId') || '');
+  const date = String(formData.get('date') || '');
+  const description = (formData.get('description') as string)?.trim();
+  const amount = parseFloat(String(formData.get('amount') || ''));
+
+  if (!expenseId || !teamId) throw new Error('Expense not found.');
+  if (!description || !amount || amount <= 0) throw new Error('Add a description and an amount greater than zero.');
+  if (!date || Number.isNaN(new Date(date).getTime())) throw new Error('Choose a valid date.');
+  const expense = await prisma.expense.findFirst({ where: { id: expenseId, userId: user.id } });
+  if (!expense) throw new Error('You can only edit your own expenses.');
+  const team = await prisma.team.findUnique({ where: { id: teamId } });
+  if (!team) throw new Error('That team no longer exists.');
+
+  await prisma.expense.update({
+    where: { id: expenseId },
+    data: { date: new Date(date), description, amount, teamId },
+  });
+  revalidatePath('/dashboard/expenses');
+  revalidatePath('/dashboard/budgets');
+}
+
 export async function decideRequest(requestId: string, status: 'APPROVED' | 'REJECTED', note: string) {
   const user = await requireUser();
-  const request = await prisma.fundingRequest.findUnique({ where: { id: requestId }, include: { team: true } });
+  const request = await prisma.fundingRequest.findUnique({ where: { id: requestId }, include: { team: true, user: true } });
   if (!request) throw new Error('Request not found.');
   const isAdmin = !!user.isAdmin;
   const isTeamApprover = !!request.team.approverEmail && request.team.approverEmail.toLowerCase() === (user.email ?? '').toLowerCase();
@@ -124,6 +153,28 @@ export async function decideRequest(requestId: string, status: 'APPROVED' | 'REJ
     where: { id: requestId },
     data: { status, decisionNote: note || null, decidedAt: new Date() },
   });
+
+  if (process.env.RESEND_API_KEY && process.env.RESEND_FROM && request.user.email) {
+    try {
+      const { Resend } = await import('resend');
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+      const requestsUrl = `${appUrl}/dashboard/my-requests`;
+      const approved = status === 'APPROVED';
+      const heading = approved ? 'Your expense request was approved' : 'Your expense request was declined';
+      const intro = approved ? 'Good news — your request has been approved.' : 'Your request was not approved.';
+      const result = await resend.emails.send({
+        from: process.env.RESEND_FROM,
+        to: request.user.email,
+        subject: `${approved ? 'Approved' : 'Declined'} expense request — £${request.amount.toFixed(2)}`,
+        html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a"><h2 style="margin-bottom:8px">${heading}</h2><p style="color:#64748b">${intro}</p><div style="padding:18px;border:1px solid #e2e8f0;border-radius:14px;margin:20px 0"><p style="margin:0 0 8px;font-size:20px;font-weight:700">£${request.amount.toFixed(2)}</p><p style="margin:0;color:#475569">${request.description}</p><p style="margin:8px 0 0;color:#64748b">${request.team.name}</p>${note ? `<p style="margin:14px 0 0;color:#475569"><strong>Note:</strong> ${escapeHtml(note)}</p>` : ''}</div>${requestsUrl ? `<a href="${requestsUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">View my requests</a>` : ''}<p style="margin-top:28px;font-size:12px;color:#94a3b8">Proclaim Expenses</p></div>`,
+        text: `${heading}.\n\n£${request.amount.toFixed(2)} — ${request.description} — ${request.team.name}.\n\n${note ? `Note: ${note}\n\n` : ''}${requestsUrl || 'Open Proclaim Expenses to view your requests.'}`,
+      });
+      if (result.error) console.error('Requester notification failed', result.error);
+    } catch (error) {
+      console.error('Requester notification failed', error);
+    }
+  }
 
   revalidatePath('/dashboard/approvals');
   revalidatePath('/dashboard/my-requests');

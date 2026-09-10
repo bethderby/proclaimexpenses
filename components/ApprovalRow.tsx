@@ -42,7 +42,7 @@ export default function ApprovalRow({
       <input
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        placeholder="Optional note for the requester"
+        
         className="mt-3 w-full rounded-md border border-stone-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
       />
       <div className="mt-3 flex gap-2">

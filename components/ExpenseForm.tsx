@@ -68,7 +68,7 @@ export default function ExpenseForm({
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1.5">Date</label>
-        <input type="date" name="date" required defaultValue={new Date().toISOString().slice(0, 10)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900" />
+        <input type="date" name="date" required defaultValue={new Date().toISOString().slice(0, 10)} className="w-full rounded-xl border border-slate-200 h-10 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900" />
       </div>
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">What did you buy?</label>
@@ -76,7 +76,7 @@ export default function ExpenseForm({
           name="description"
           required
           className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
-          placeholder="Client dinner with Acme Ltd"
+          
         />
       </div>
       <div>
@@ -89,8 +89,8 @@ export default function ExpenseForm({
             min="0"
             name="amount"
             required
-            className="w-full rounded-md border border-stone-300 pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
-            placeholder="0.00"
+            className="w-full rounded-md border border-stone-300 h-10 pl-7 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            
           />
         </div>
       </div>
@@ -146,9 +146,9 @@ export default function ExpenseForm({
       <button
         type="submit"
         disabled={!receiptUrl || busy}
-        className="w-full rounded-xl bg-slate-950 text-white px-4 py-3 text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
+        className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-[.99] disabled:cursor-wait disabled:bg-emerald-700 disabled:opacity-100"
       >
-        Log expense
+        {busy ? 'Uploading…' : 'Log expense'}
       </button>
     </form>
   );
