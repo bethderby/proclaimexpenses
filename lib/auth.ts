@@ -10,8 +10,16 @@ export const authOptions: NextAuthOptions = {
     clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
   })],
   session: { strategy: 'database' },
-  pages: { signIn: '/login' },
+  pages: { signIn: '/login', error: '/login' },
   callbacks: {
+    async signIn({ user }) {
+      // Removed users keep their historical rows (name/email preserved for
+      // Expenses and approved FundingRequests) but must never be able to
+      // sign back in.
+      const dbUser = await prisma.user.findUnique({ where: { id: user.id }, select: { removedAt: true } });
+      if (dbUser?.removedAt) return '/login?error=removed';
+      return true;
+    },
     async session({ session, user }) {
       if (session.user) {
         (session.user as any).id = user.id;

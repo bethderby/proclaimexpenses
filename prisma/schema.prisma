@@ -46,6 +46,7 @@ model User {
   emailVerified DateTime?
   image         String?
   isAdmin       Boolean   @default(false)
+  removedAt     DateTime?
   accounts      Account[]
   sessions      Session[]
   requests      FundingRequest[]

@@ -284,6 +284,41 @@ export async function setAdminStatus(formData: FormData) {
   revalidatePath('/dashboard/teams');
 }
 
+export async function removeUser(formData: FormData) {
+  const user = await requireUser();
+  if (!user.isAdmin) throw new Error('Only admins can remove users.');
+  const email = String(formData.get('email') || '').trim().toLowerCase();
+  if (!email) throw new Error('Email is required.');
+  if (email === (user.email ?? '').toLowerCase()) throw new Error('You cannot remove your own account.');
+
+  const target = await prisma.user.findUnique({ where: { email } });
+  if (!target) throw new Error('User not found.');
+  if (target.removedAt) return; // already removed
+
+  await prisma.$transaction(async (tx) => {
+    // Requests that were never approved carry no ongoing obligation, so they're
+    // deleted outright. Approved requests and every expense stay untouched —
+    // that's the history that must remain.
+    await tx.fundingRequest.deleteMany({ where: { userId: target.id, status: { not: 'APPROVED' } } });
+    // Free up their team roles/approver assignments and sign them out everywhere.
+    await tx.teamMember.deleteMany({ where: { userId: target.id } });
+    await tx.session.deleteMany({ where: { userId: target.id } });
+    await tx.account.deleteMany({ where: { userId: target.id } });
+    if (target.email) {
+      await tx.team.updateMany({ where: { approverEmail: { equals: target.email, mode: 'insensitive' } }, data: { approverEmail: null } });
+    }
+    // Keep the User row itself (with its name/email intact) so historical
+    // Expenses and approved FundingRequests still display correctly, but
+    // mark it removed so they lose admin rights and can never sign in again.
+    await tx.user.update({ where: { id: target.id }, data: { isAdmin: false, removedAt: new Date() } });
+  });
+
+  revalidatePath('/dashboard/teams');
+  revalidatePath('/dashboard/approvals');
+  revalidatePath('/dashboard/expenses');
+  revalidatePath('/dashboard/my-requests');
+}
+
 export async function sendReportNow(formData: FormData) {
   const user = await requireUser();
   if (!user.isAdmin) throw new Error('Only admins can send reports.');

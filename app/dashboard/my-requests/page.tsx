@@ -3,21 +3,65 @@ import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import StatusPill from '@/components/StatusPill';
+import DateRangeFilter from '@/components/DateRangeFilter';
 
 const fmt = (n: number) => `£${n.toFixed(2)}`;
+const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const isoFirstOfMonth = () => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10); };
+const isoToday = () => new Date().toISOString().slice(0, 10);
 
-export default async function MyRequestsPage() {
+export default async function MyRequestsPage({ searchParams }: { searchParams: { from?: string; to?: string } }) {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect('/login');
   const user = session.user as any;
-  const requests = await prisma.fundingRequest.findMany({ where: { userId: user.id }, include: { team: true }, orderBy: { submittedAt: 'desc' } });
+  const from = searchParams.from || isoFirstOfMonth();
+  const to = searchParams.to || isoToday();
+  const fromDate = new Date(`${from}T00:00:00`);
+  const toDate = new Date(`${to}T23:59:59.999`);
+
+  const requests = await prisma.fundingRequest.findMany({ where: { userId: user.id, date: { gte: fromDate, lte: toDate } }, include: { team: true }, orderBy: { date: 'desc' } });
   const approverEmails = [...new Set(requests.map(r => r.team.approverEmail).filter(Boolean) as string[])];
   const approvers = await prisma.user.findMany({ where: { email: { in: approverEmails, mode: 'insensitive' } }, select: { name: true, email: true } });
   const approverByEmail = new Map(approvers.map(a => [a.email?.toLowerCase(), a.name || a.email || 'Configured approver']));
   const total = requests.reduce((s, r) => s + (r.status !== 'REJECTED' ? r.amount : 0), 0);
 
   return <div className="space-y-6">
-    <div><p className="text-sm font-semibold text-emerald-600">Requests</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Track your requests.</h1><p className="mt-2 text-sm text-slate-500">{requests.length} submitted · {fmt(total)} approved or pending.</p></div>
-    {requests.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center text-sm text-slate-500">Nothing submitted yet.</div> : <div className="grid gap-4">{requests.map(r => { const approver = r.team.approverEmail ? (approverByEmail.get(r.team.approverEmail.toLowerCase()) || r.team.approverEmail) : 'Not configured'; return <article key={r.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-sm font-semibold text-slate-950">{r.description}</h2><StatusPill status={r.status}/></div><p className="mt-2 text-xs text-slate-500">{r.team.name} · Needed {r.date.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</p></div><p className="text-xl font-bold text-slate-950">{fmt(r.amount)}</p></div><div className="mt-4 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2"><div><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Potential approver</p><p className="mt-1 text-sm font-semibold text-slate-800">{approver}</p></div><div><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Submitted</p><p className="mt-1 text-sm text-slate-700">{r.submittedAt.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</p></div></div>{r.decisionNote && <p className="mt-4 rounded-xl border border-slate-100 px-4 py-3 text-xs italic text-slate-500">“{r.decisionNote}”</p>}</article>})}</div>}
+    <div><p className="text-sm font-semibold text-emerald-600">Requests</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Track your requests.</h1><p className="mt-2 text-sm text-slate-500">Look up any period below — it opens on this month by default.</p></div>
+    <DateRangeFilter from={from} to={to} />
+    <div className="flex items-center justify-between"><h2 className="font-semibold text-slate-950">{requests.length} request{requests.length === 1 ? '' : 's'}</h2><span className="text-sm font-semibold text-slate-600">{fmt(total)} approved or pending</span></div>
+
+    {requests.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center text-sm text-slate-500">Nothing submitted in this date range.</div> : <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {/* Desktop lookup table */}
+      <div className="hidden sm:block">
+        <div className="grid grid-cols-[100px_1fr_140px_100px_110px_100px] gap-3 border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <span>Needed</span><span>Description</span><span>Team</span><span className="text-right">Amount</span><span>Status</span><span>Approver</span>
+        </div>
+        {requests.map(r => { const approver = r.team.approverEmail ? (approverByEmail.get(r.team.approverEmail.toLowerCase()) || r.team.approverEmail) : 'Not configured'; return (
+          <div key={r.id} className="border-b border-slate-100 px-4 py-3 text-sm last:border-0 hover:bg-slate-50">
+            <div className="grid grid-cols-[100px_1fr_140px_100px_110px_100px] items-center gap-3">
+              <span className="text-slate-500">{fmtDate(r.date)}</span>
+              <span className="truncate font-medium text-slate-950">{r.description}</span>
+              <span className="truncate text-slate-500">{r.team.name}</span>
+              <span className="text-right font-semibold text-slate-950">{fmt(r.amount)}</span>
+              <span><StatusPill status={r.status} /></span>
+              <span className="truncate text-xs text-slate-500">{approver}</span>
+            </div>
+            {r.decisionNote && <p className="mt-2 truncate text-xs italic text-slate-500">“{r.decisionNote}”</p>}
+          </div>
+        ); })}
+      </div>
+
+      {/* Mobile compact rows */}
+      <div className="divide-y divide-slate-100 sm:hidden">
+        {requests.map(r => { const approver = r.team.approverEmail ? (approverByEmail.get(r.team.approverEmail.toLowerCase()) || r.team.approverEmail) : 'Not configured'; return (
+          <div key={r.id} className="p-4">
+            <div className="flex items-start justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><p className="truncate text-sm font-semibold text-slate-950">{r.description}</p><StatusPill status={r.status} /></div><p className="shrink-0 text-sm font-bold text-slate-950">{fmt(r.amount)}</p></div>
+            <p className="mt-1 truncate text-xs text-slate-500">{r.team.name} · Needed {fmtDate(r.date)}</p>
+            <p className="mt-0.5 truncate text-xs text-slate-400">Approver: {approver}</p>
+            {r.decisionNote && <p className="mt-1.5 text-xs italic text-slate-500">“{r.decisionNote}”</p>}
+          </div>
+        ); })}
+      </div>
+    </div>}
   </div>;
 }

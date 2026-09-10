@@ -1,8 +1,23 @@
 'use client';
 
 import { useState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { AlertCircle, Trash2, Upload } from 'lucide-react';
 import { submitExpense } from '@/app/actions';
+import DateField from './DateField';
+
+function LogExpenseButton({ receiptReady, busy }: { receiptReady: boolean; busy: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={!receiptReady || busy || pending}
+      className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-[.99] disabled:cursor-wait disabled:bg-emerald-700 disabled:opacity-100"
+    >
+      {pending ? 'Logging…' : busy ? 'Uploading…' : 'Log expense'}
+    </button>
+  );
+}
 
 
 
@@ -68,7 +83,7 @@ export default function ExpenseForm({
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1.5">Date</label>
-        <input type="date" name="date" required defaultValue={new Date().toISOString().slice(0, 10)} className="w-full rounded-xl border border-slate-200 h-10 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900" />
+        <DateField name="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
       </div>
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">What did you buy?</label>
@@ -135,7 +150,7 @@ export default function ExpenseForm({
                   setReceiptType('');
                   setReceiptName('');
                 }}
-                className="text-xs text-rose-600 flex items-center gap-1 mt-1"
+                className="text-xs text-rose-600 flex items-center gap-1 mt-1 transition active:scale-[.96]"
               >
                 <Trash2 size={12} /> Remove
               </button>
@@ -143,13 +158,7 @@ export default function ExpenseForm({
           </div>
         )}
       </div>
-      <button
-        type="submit"
-        disabled={!receiptUrl || busy}
-        className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-[.99] disabled:cursor-wait disabled:bg-emerald-700 disabled:opacity-100"
-      >
-        {busy ? 'Uploading…' : 'Log expense'}
-      </button>
+      <LogExpenseButton receiptReady={!!receiptUrl} busy={busy} />
     </form>
   );
 }

@@ -23,8 +23,10 @@ export default function ApprovalRow({
 }) {
   const [note, setNote] = useState('');
   const [pending, startTransition] = useTransition();
+  const [pendingAction, setPendingAction] = useState<'APPROVED' | 'REJECTED' | null>(null);
 
   function decide(status: 'APPROVED' | 'REJECTED') {
+    setPendingAction(status);
     startTransition(async () => {
       await decideRequest(id, status, note);
     });
@@ -49,16 +51,16 @@ export default function ApprovalRow({
         <button
           disabled={pending}
           onClick={() => decide('APPROVED')}
-          className="flex items-center gap-1.5 rounded-md bg-emerald-700 text-white px-3 py-1.5 text-sm font-medium hover:bg-emerald-800 disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-md bg-emerald-700 text-white px-3 py-1.5 text-sm font-medium transition hover:bg-emerald-800 active:scale-[.97] disabled:cursor-wait disabled:opacity-70"
         >
-          <CheckCircle2 size={14} /> Approve
+          <CheckCircle2 size={14} /> {pending && pendingAction === 'APPROVED' ? 'Approving…' : 'Approve'}
         </button>
         <button
           disabled={pending}
           onClick={() => decide('REJECTED')}
-          className="flex items-center gap-1.5 rounded-md border border-rose-300 text-rose-700 px-3 py-1.5 text-sm font-medium hover:bg-rose-50 disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-md border border-rose-300 text-rose-700 px-3 py-1.5 text-sm font-medium transition hover:bg-rose-50 active:scale-[.97] disabled:cursor-wait disabled:opacity-70"
         >
-          <XCircle size={14} /> Reject
+          <XCircle size={14} /> {pending && pendingAction === 'REJECTED' ? 'Rejecting…' : 'Reject'}
         </button>
       </div>
     </div>

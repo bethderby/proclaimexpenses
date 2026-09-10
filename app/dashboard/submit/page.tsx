@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { submitRequest } from '@/app/actions';
 import SubmitButton from '@/components/SubmitButton';
+import DateField from '@/components/DateField';
 
 
 
@@ -42,7 +43,7 @@ export default async function SubmitPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Date needed</label>
-            <input type="date" name="date" required defaultValue={new Date().toISOString().slice(0, 10)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900" />
+            <DateField name="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
           </div>
           <div>
             <label className="block text-sm font-medium text-stone-700 mb-1">What's it for?</label>
