@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+html { background: #f8fafc; }
+body { @apply bg-slate-50 text-slate-800 antialiased; }
+* { box-sizing: border-box; }
+button, a, input, select { -webkit-tap-highlight-color: transparent; }
+input, select { @apply outline-none; }
+::selection { @apply bg-slate-900 text-white; }
