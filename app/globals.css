@@ -9,3 +9,25 @@ body { @apply bg-slate-50 text-slate-800 antialiased; font-family: Inter, ui-san
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 input, select, textarea { @apply outline-none; }
 ::selection { @apply bg-slate-900 text-white; }
+
+/* Mobile browsers (esp. iOS/Android) render the native date value using
+   their own agent styles, ignoring the font-size set on the input via
+   Tailwind classes. Force it back down to match the rest of the form. */
+input[type="date"] {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  font-size: 0.875rem;
+}
+input[type="date"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+input[type="date"]::-webkit-datetime-edit-text,
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field {
+  font-size: 0.875rem;
+}
+
+.font-cursive { font-family: var(--font-cursive), cursive; }
