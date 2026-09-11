@@ -13,11 +13,15 @@ export const authOptions: NextAuthOptions = {
   pages: { signIn: '/login', error: '/login' },
   callbacks: {
     async signIn({ user }) {
-      // Removed users keep their historical rows (name/email preserved for
-      // Expenses and approved FundingRequests) but must never be able to
-      // sign back in.
+      // Removal only cleans up their unapproved requests, team roles and
+      // active sessions at the time — it isn't a permanent ban. If they sign
+      // in again later, welcome them back: clear the removed marker so
+      // they're a normal active user again (their preserved history and
+      // this "new" login are simply the same account).
       const dbUser = await prisma.user.findUnique({ where: { id: user.id }, select: { removedAt: true } });
-      if (dbUser?.removedAt) return '/login?error=removed';
+      if (dbUser?.removedAt) {
+        await prisma.user.update({ where: { id: user.id }, data: { removedAt: null } });
+      }
       return true;
     },
     async session({ session, user }) {

@@ -308,8 +308,10 @@ export async function removeUser(formData: FormData) {
       await tx.team.updateMany({ where: { approverEmail: { equals: target.email, mode: 'insensitive' } }, data: { approverEmail: null } });
     }
     // Keep the User row itself (with its name/email intact) so historical
-    // Expenses and approved FundingRequests still display correctly, but
-    // mark it removed so they lose admin rights and can never sign in again.
+    // Expenses and approved FundingRequests still display correctly, and
+    // mark it removed for now. This is not a ban — if they sign in again
+    // later, lib/auth.ts clears removedAt and welcomes them back as an
+    // active (non-admin) user.
     await tx.user.update({ where: { id: target.id }, data: { isAdmin: false, removedAt: new Date() } });
   });
 

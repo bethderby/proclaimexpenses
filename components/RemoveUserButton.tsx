@@ -8,7 +8,7 @@ export default function RemoveUserButton({ email, name }: { email: string; name:
     <form
       action={removeUser}
       onSubmit={(e) => {
-        if (!confirm(`Remove ${name}? Their unapproved requests will be deleted, but their expense and approved request history will stay.`)) {
+        if (!confirm(`Remove ${name}? Their unapproved requests will be deleted, but expense and approved request history stays. They can sign in again later if they need to come back.`)) {
           e.preventDefault();
         }
       }}
