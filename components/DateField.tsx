@@ -20,6 +20,7 @@ export default function DateField({
   onChange,
   required,
   dark,
+  reportFormat,
 }: {
   name?: string;
   defaultValue?: string;
@@ -27,11 +28,15 @@ export default function DateField({
   onChange?: (value: string) => void;
   required?: boolean;
   dark?: boolean;
+  reportFormat?: boolean;
 }) {
   const [internal, setInternal] = useState(defaultValue || '');
   const current = value !== undefined ? value : internal;
   const display = current
-    ? new Date(current + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    ? (() => {
+        const [year, month, day] = current.split('-');
+        return reportFormat ? `${month}-${day}-${year}` : new Date(current + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      })()
     : '';
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {

@@ -8,6 +8,7 @@ const dancingScript = Dancing_Script({ subsets: ['latin'], weight: ['700'], vari
 export const metadata: Metadata = {
   title: 'Proclaim Expenses — team expenses',
   description: 'Submit, approve, and track team expenses.',
+  icons: { icon: '/favicon.png', shortcut: '/favicon.png', apple: '/favicon.png' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -38,11 +38,13 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).id = user.id;
         const email = (user.email ?? '').toLowerCase();
         const dbUser = await prisma.user.findUnique({ where: { id: user.id }, select: { isAdmin: true } });
+        const approverMembership = email
+          ? await prisma.teamMember.findFirst({ where: { role: 'APPROVER', userId: user.id }, select: { id: true } })
+          : null;
         const legacyApprover = email
           ? await prisma.team.findFirst({ where: { approverEmail: { equals: email, mode: 'insensitive' } }, select: { id: true } })
           : null;
-        // Approver access comes from Team.approverEmail. Team membership is not required.
-        (session.user as any).isApprover = !!legacyApprover;
+        (session.user as any).isApprover = !!approverMembership || !!legacyApprover;
         const envAdmins = (process.env.ADMIN_EMAILS ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
         (session.user as any).isAdmin = !!dbUser?.isAdmin || envAdmins.includes(email);
       }

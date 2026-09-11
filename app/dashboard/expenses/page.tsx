@@ -26,7 +26,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: { f
   const teamList = teams.map(t => ({ id: t.id, name: t.name }));
 
   return <div className="space-y-6">
-    <div><p className="text-sm font-semibold text-emerald-600">Expense log</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Keep every purchase in one place.</h1><p className="mt-2 max-w-2xl text-sm text-slate-500">Upload receipts as you spend, then look them up below by date.</p></div>
+    <div><p className="text-sm font-semibold text-emerald-600">Expense log</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Submit and manage your expenses.</h1><p className="mt-2 max-w-2xl text-sm text-slate-500">Upload receipts as you spend, then look them up below by date.</p></div>
     {teams.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center text-sm text-slate-500">No teams have been set up yet.</div> : <div className="grid gap-6 xl:grid-cols-[minmax(320px,430px)_1fr]">
       <div><ExpenseForm teams={teamList} approvedRequests={approvedRequests.map(r => ({ id: r.id, description: r.description, amount: r.amount }))} /></div>
       <section className="min-w-0 space-y-4">

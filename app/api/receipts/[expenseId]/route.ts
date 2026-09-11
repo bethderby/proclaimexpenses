@@ -23,7 +23,8 @@ export async function GET(
   const email = (user.email ?? '').toLowerCase();
   const isOwner = expense.userId === user.id;
   const isAdmin = !!user.isAdmin;
-  const isTeamApprover = !!expense.team.approverEmail && expense.team.approverEmail.toLowerCase() === email;
+  const teamApprover = await prisma.teamMember.findFirst({ where: { teamId: expense.team.id, userId: user.id, role: 'APPROVER' }, select: { id: true } });
+  const isTeamApprover = !!teamApprover || (!!expense.team.approverEmail && expense.team.approverEmail.toLowerCase() === email);
   if (!isOwner && !isAdmin && !isTeamApprover) {
     return new NextResponse('Forbidden', { status: 403 });
   }
