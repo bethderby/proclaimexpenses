@@ -22,15 +22,9 @@ export const authOptions: NextAuthOptions = {
   pages: { signIn: '/login', error: '/login' },
   callbacks: {
     async signIn({ user }) {
-      // Removal only cleans up their unapproved requests, team roles and
-      // active sessions at the time — it isn't a permanent ban. If they sign
-      // in again later, welcome them back: clear the removed marker so
-      // they're a normal active user again (their preserved history and
-      // this "new" login are simply the same account).
-      const dbUser = await prisma.user.findUnique({ where: { id: user.id }, select: { removedAt: true } });
-      if (dbUser?.removedAt) {
-        await prisma.user.update({ where: { id: user.id }, data: { removedAt: null } });
-      }
+      // Removal is deliberately not a login ban. A removed user may still
+      // authenticate, but the removed marker is preserved so they stay hidden
+      // from the admin People list until an admin explicitly re-adds them.
       return true;
     },
     async session({ session, user }) {

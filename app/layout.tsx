@@ -6,7 +6,7 @@ import './globals.css';
 const dancingScript = Dancing_Script({ subsets: ['latin'], weight: ['700'], variable: '--font-cursive' });
 
 export const metadata: Metadata = {
-  title: 'Proclaim Expenses — team expenses',
+  title: 'Proclaim Expenses',
   description: 'Submit, approve, and track team expenses.',
   icons: { icon: '/favicon.png', shortcut: '/favicon.png', apple: '/favicon.png' },
 };

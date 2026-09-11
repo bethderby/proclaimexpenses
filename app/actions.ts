@@ -267,7 +267,7 @@ export async function upsertTeamMember(formData: FormData) {
   const role = String(formData.get('role') || 'USER') as 'USER' | 'APPROVER';
   if (!teamId || !email || !email.includes('@')) throw new Error('Enter a valid email address.');
   if (!['USER','APPROVER'].includes(role)) throw new Error('Invalid team role.');
-  const member = await prisma.user.upsert({ where: { email }, update: {}, create: { email } });
+  const member = await prisma.user.upsert({ where: { email }, update: { removedAt: null }, create: { email } });
   await prisma.teamMember.upsert({ where: { userId_teamId: { userId: member.id, teamId } }, update: { role }, create: { userId: member.id, teamId, role } });
   revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals');
 }
@@ -288,7 +288,7 @@ export async function setAdminStatus(formData: FormData) {
   const isAdmin = String(formData.get('isAdmin')) === 'true';
   if (!email) throw new Error('Email is required.');
   if (!isAdmin && email === (user.email ?? '').toLowerCase()) throw new Error('You cannot remove your own admin access.');
-  await prisma.user.upsert({ where: { email }, update: { isAdmin }, create: { email, isAdmin } });
+  await prisma.user.upsert({ where: { email }, update: { isAdmin, ...(isAdmin ? { removedAt: null } : {}) }, create: { email, isAdmin } });
   revalidatePath('/dashboard/teams');
 }
 
@@ -319,10 +319,9 @@ export async function removeUser(formData: FormData) {
       await tx.team.updateMany({ where: { approverEmail: { equals: target.email, mode: 'insensitive' } }, data: { approverEmail: null } });
     }
     // Keep the User row itself (with its name/email intact) so historical
-    // Expenses and approved FundingRequests still display correctly, and
-    // mark it removed for now. This is not a ban — if they sign in again
-    // later, lib/auth.ts clears removedAt and welcomes them back as an
-    // active (non-admin) user.
+    // Expenses and approved FundingRequests still display correctly.
+    // The removed marker is retained even if they sign in again, which keeps
+    // them hidden from the admin People list until explicitly re-added.
     await tx.user.update({ where: { id: target.id }, data: { isAdmin: false, removedAt: new Date() } });
   });
 
