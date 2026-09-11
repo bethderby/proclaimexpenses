@@ -8,6 +8,15 @@ export const authOptions: NextAuthOptions = {
   providers: [GoogleProvider({
     clientId: process.env.GOOGLE_CLIENT_ID as string,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+    // Removing a user keeps their User row (so history stays attached) but
+    // used to also delete their linked Account row. On the next Google
+    // sign-in, NextAuth then sees a Google identity with no Account link
+    // pointing at an existing User with the same email, and — as a security
+    // guard against silently merging unrelated accounts — refuses with
+    // OAuthAccountNotLinked instead of relinking. Google is our only
+    // provider and its emails are verified, so it's safe to let NextAuth
+    // relink automatically here.
+    allowDangerousEmailAccountLinking: true,
   })],
   session: { strategy: 'database' },
   pages: { signIn: '/login', error: '/login' },

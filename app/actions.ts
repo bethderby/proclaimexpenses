@@ -180,6 +180,20 @@ export async function decideRequest(requestId: string, status: 'APPROVED' | 'REJ
   revalidatePath('/dashboard/my-requests');
 }
 
+export async function cancelRequest(formData: FormData) {
+  const user = await requireUser();
+  const requestId = String(formData.get('requestId') || '');
+  if (!requestId) throw new Error('Request not found.');
+  const request = await prisma.fundingRequest.findUnique({ where: { id: requestId } });
+  if (!request || request.userId !== user.id) throw new Error('Request not found.');
+  if (request.status !== 'PENDING') throw new Error('Only requests still awaiting a decision can be cancelled.');
+
+  await prisma.fundingRequest.update({ where: { id: requestId }, data: { status: 'CANCELLED', decidedAt: new Date() } });
+
+  revalidatePath('/dashboard/my-requests');
+  revalidatePath('/dashboard/approvals');
+}
+
 export async function updateBudget(teamId: string, target: number) {
   const user = await requireUser();
   const team = await prisma.team.findUnique({ where: { id: teamId } });
@@ -300,10 +314,13 @@ export async function removeUser(formData: FormData) {
     // deleted outright. Approved requests and every expense stay untouched —
     // that's the history that must remain.
     await tx.fundingRequest.deleteMany({ where: { userId: target.id, status: { not: 'APPROVED' } } });
-    // Free up their team roles/approver assignments and sign them out everywhere.
+    // Free up their team roles/approver assignments and sign them out of any
+    // active sessions. We deliberately leave their Account (OAuth link)
+    // alone — with allowDangerousEmailAccountLinking on, NextAuth would
+    // relink it anyway on their next sign-in, and keeping it avoids that
+    // relink step altogether.
     await tx.teamMember.deleteMany({ where: { userId: target.id } });
     await tx.session.deleteMany({ where: { userId: target.id } });
-    await tx.account.deleteMany({ where: { userId: target.id } });
     if (target.email) {
       await tx.team.updateMany({ where: { approverEmail: { equals: target.email, mode: 'insensitive' } }, data: { approverEmail: null } });
     }
