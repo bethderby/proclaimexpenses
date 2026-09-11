@@ -10,7 +10,7 @@ export default async function DashboardPage(){
  const [requests,expenses,pending]=await Promise.all([
   prisma.fundingRequest.findMany({where:{userId:user.id},include:{team:true},orderBy:{submittedAt:'desc'},take:5}),
   prisma.expense.findMany({where:{userId:user.id},include:{team:true},orderBy:{submittedAt:'desc'},take:5}),
-  user.isAdmin ? prisma.fundingRequest.count({where:{status:'PENDING'}}) : user.isApprover ? prisma.fundingRequest.count({where:{status:'PENDING',team:{approverEmail:{equals:user.email,mode:'insensitive'}}}}) : Promise.resolve(0)
+  user.isAdmin ? prisma.fundingRequest.count({where:{status:'PENDING'}}) : user.isApprover ? prisma.fundingRequest.count({where:{status:'PENDING',team:{members:{some:{userId:user.id,role:'APPROVER'}}}}}) : Promise.resolve(0)
  ]);
  const requestTotal=requests.reduce((s,r)=>s+(r.status!=='REJECTED'?r.amount:0),0); const expenseTotal=expenses.reduce((s,e)=>s+e.amount,0);
  return <div className="space-y-6 sm:space-y-8"><div><p className="text-sm font-semibold text-emerald-600">Overview</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Good to see you, {user.name?.split(' ')[0] || 'there'}.</h1><p className="mt-2 max-w-2xl text-sm text-slate-500">See what needs your attention and keep your spending moving.</p></div>

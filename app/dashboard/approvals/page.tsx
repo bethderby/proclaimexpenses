@@ -13,7 +13,7 @@ export default async function ApprovalsPage() {
   const items = await prisma.fundingRequest.findMany({
     where: user.isAdmin
       ? { status: 'PENDING' }
-      : { status: 'PENDING', team: { approverEmail: { equals: user.email, mode: 'insensitive' } } },
+      : { status: 'PENDING', team: { members: { some: { userId: user.id, role: 'APPROVER' } } } },
     include: { user: true, team: true },
     orderBy: { submittedAt: 'asc' },
   });
@@ -21,7 +21,7 @@ export default async function ApprovalsPage() {
   return (
     <div>
       <h2 className="text-2xl font-semibold text-stone-900 tracking-tight mb-1">Approvals</h2>
-      <p className="text-sm text-stone-500 mb-6">Pending requests for teams you approve.</p>
+      <p className="text-sm text-stone-500 mb-6">Requests awaiting your approval.</p>
       {items.length === 0 ? (
         <div className="border border-dashed border-stone-300 rounded-lg py-14 text-center text-sm text-stone-400">
           Nothing waiting on you right now.

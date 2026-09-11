@@ -29,9 +29,10 @@ export async function submitRequest(formData: FormData) {
   }
   if (!date || Number.isNaN(new Date(date).getTime())) throw new Error('Choose a valid date.');
 
-  const team = await prisma.team.findUnique({ where: { id: teamId } });
+  const team = await prisma.team.findUnique({ where: { id: teamId }, include: { members: { where: { role: 'APPROVER' }, include: { user: { select: { email: true } } } } } });
   if (!team) throw new Error('That team no longer exists.');
-  if (!team.approverEmail) throw new Error('That team does not have an approver configured yet. Ask an admin to set one.');
+  const approverEmails = [...new Set([team.approverEmail, ...team.members.map(m => m.user.email)].filter(Boolean).map(e => e!.toLowerCase()))];
+  if (!approverEmails.length) throw new Error('That team does not have an approver configured yet. Ask an admin to set one.');
 
   const request = await prisma.fundingRequest.create({
     data: {
@@ -55,7 +56,7 @@ export async function submitRequest(formData: FormData) {
       const approvalUrl = `${appUrl}/dashboard/approvals`;
       const result = await resend.emails.send({
         from: process.env.RESEND_FROM,
-        to: team.approverEmail,
+        to: approverEmails,
         subject: `Expense request needs approval — £${amount.toFixed(2)}`,
         html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a"><h2 style="margin-bottom:8px">New expense request</h2><p style="color:#64748b">${requester} submitted a request for <strong>${escapeHtml(team.name)}</strong>.</p><div style="padding:18px;border:1px solid #e2e8f0;border-radius:14px;margin:20px 0"><p style="margin:0 0 8px;font-size:20px;font-weight:700">£${amount.toFixed(2)}</p><p style="margin:0;color:#475569">${escapeHtml(description)}</p></div>${approvalUrl ? `<a href="${approvalUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Review request</a>` : '<p>Open Proclaim Expenses to review the request.</p>'}<p style="margin-top:28px;font-size:12px;color:#94a3b8">Proclaim Expenses</p></div>`,
         text: `${requester} submitted a £${amount.toFixed(2)} request for ${escapeHtml(team.name)}.\n\n${escapeHtml(description)}\n\n${approvalUrl || 'Open Proclaim Expenses to approve or reject it.'}`,
@@ -142,10 +143,11 @@ export async function updateExpense(formData: FormData) {
 
 export async function decideRequest(requestId: string, status: 'APPROVED' | 'REJECTED', note: string) {
   const user = await requireUser();
-  const request = await prisma.fundingRequest.findUnique({ where: { id: requestId }, include: { team: true, user: true } });
+  const request = await prisma.fundingRequest.findUnique({ where: { id: requestId }, include: { team: { include: { members: { where: { role: 'APPROVER' }, include: { user: { select: { email: true } } } } } }, user: true } });
   if (!request) throw new Error('Request not found.');
   const isAdmin = !!user.isAdmin;
-  const isTeamApprover = !!request.team.approverEmail && request.team.approverEmail.toLowerCase() === (user.email ?? '').toLowerCase();
+  const approverEmail = (user.email ?? '').toLowerCase();
+  const isTeamApprover = !!approverEmail && ([request.team.approverEmail, ...request.team.members.map(m => m.user.email)].filter(Boolean) as string[]).some(e => e.toLowerCase() === approverEmail);
   if (!isAdmin && !isTeamApprover) throw new Error("Only this team's configured approver can decide this request.");
   if (request.status !== 'PENDING') throw new Error('This request has already been decided.');
 
@@ -198,57 +200,49 @@ export async function updateBudget(teamId: string, target: number) {
   const user = await requireUser();
   const team = await prisma.team.findUnique({ where: { id: teamId } });
   if (!team) throw new Error('Team not found.');
-  const allowed = user.isAdmin || team.approverEmail?.toLowerCase() === (user.email ?? '').toLowerCase();
+  const allowed = user.isAdmin || !!(await prisma.teamMember.findFirst({ where: { teamId, userId: user.id, role: 'APPROVER' } })) || team.approverEmail?.toLowerCase() === (user.email ?? '').toLowerCase();
   if (!allowed) throw new Error("Only this team's approver or an admin can change its budget.");
   await prisma.team.update({ where: { id: teamId }, data: { budgetTarget: target } });
   revalidatePath('/dashboard/budgets');
 }
 
-// Admins can add new teams from the portal.
+// Admins can add and edit teams. A team may have multiple approvers; any one of them can decide a request.
 export async function createTeam(formData: FormData) {
   const user = await requireUser();
   if (!user.isAdmin) throw new Error('Only admins can add teams.');
-
   const name = (formData.get('name') as string)?.trim();
-  const approverEmail = (formData.get('approverEmail') as string)?.trim().toLowerCase() || null;
+  const approverEmails = [...new Set(formData.getAll('approverEmail').map(v => String(v).trim().toLowerCase()).filter(Boolean))];
   const budgetTarget = parseFloat((formData.get('budgetTarget') as string) || '0') || 0;
-
-  if (!name) { throw new Error('A team name is required.'); }
-  if (!approverEmail || !approverEmail.includes('@')) throw new Error('A valid approver email is required.');
-
-  await prisma.team.create({
-    data: { name, approverEmail, budgetTarget },
+  if (!name) throw new Error('A team name is required.');
+  if (!approverEmails.length || approverEmails.some(e => !e.includes('@'))) throw new Error('Add at least one valid approver email.');
+  await prisma.$transaction(async tx => {
+    const team = await tx.team.create({ data: { name, approverEmail: approverEmails[0], budgetTarget } });
+    for (const email of approverEmails) {
+      const approver = await tx.user.upsert({ where: { email }, update: {}, create: { email } });
+      await tx.teamMember.upsert({ where: { userId_teamId: { userId: approver.id, teamId: team.id } }, update: { role: 'APPROVER' }, create: { userId: approver.id, teamId: team.id, role: 'APPROVER' } });
+    }
   });
-
-  revalidatePath('/dashboard/teams');
-  revalidatePath('/dashboard/submit');
-  revalidatePath('/dashboard/expenses');
+  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/submit'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/approvals');
 }
 
-// Admins can edit an existing team's approver and budget from the portal.
 export async function updateTeam(formData: FormData) {
   const user = await requireUser();
   if (!user.isAdmin) throw new Error('Only admins can edit teams.');
-
-  const teamId = formData.get('teamId') as string;
+  const teamId = String(formData.get('teamId') || '');
   const name = (formData.get('name') as string)?.trim();
-  const submittedApprover = (formData.get('approverEmail') as string | null)?.trim().toLowerCase();
-  const existingTeam = await prisma.team.findUnique({ where: { id: teamId } });
-  if (!existingTeam) throw new Error('Team not found.');
-  const approverEmail = submittedApprover === undefined ? existingTeam.approverEmail : (submittedApprover || null);
+  const approverEmails = [...new Set(formData.getAll('approverEmail').map(v => String(v).trim().toLowerCase()).filter(Boolean))];
   const budgetTarget = parseFloat((formData.get('budgetTarget') as string) || '0') || 0;
-
-  if (!teamId || !name) { throw new Error('A team name is required.'); }
-  if (!approverEmail || !approverEmail.includes('@')) throw new Error('A valid approver email is required.');
-
-  await prisma.team.update({
-    where: { id: teamId },
-    data: { name, approverEmail, budgetTarget },
+  if (!teamId || !name) throw new Error('A team name is required.');
+  if (!approverEmails.length || approverEmails.some(e => !e.includes('@'))) throw new Error('Add at least one valid approver email.');
+  await prisma.$transaction(async tx => {
+    await tx.team.update({ where: { id: teamId }, data: { name, approverEmail: approverEmails[0], budgetTarget } });
+    await tx.teamMember.deleteMany({ where: { teamId, role: 'APPROVER' } });
+    for (const email of approverEmails) {
+      const approver = await tx.user.upsert({ where: { email }, update: {}, create: { email } });
+      await tx.teamMember.upsert({ where: { userId_teamId: { userId: approver.id, teamId } }, update: { role: 'APPROVER' }, create: { userId: approver.id, teamId, role: 'APPROVER' } });
+    }
   });
-
-  revalidatePath('/dashboard/teams');
-  revalidatePath('/dashboard/approvals');
-  revalidatePath('/dashboard/budgets');
+  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/budgets'); revalidatePath('/dashboard/submit');
 }
 
 export async function deleteTeam(formData: FormData) {

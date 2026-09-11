@@ -20,8 +20,8 @@ export default async function MyRequestsPage({ searchParams }: { searchParams: {
   const fromDate = new Date(`${from}T00:00:00`);
   const toDate = new Date(`${to}T23:59:59.999`);
 
-  const requests = await prisma.fundingRequest.findMany({ where: { userId: user.id, date: { gte: fromDate, lte: toDate } }, include: { team: true }, orderBy: { date: 'desc' } });
-  const approverEmails = [...new Set(requests.map(r => r.team.approverEmail).filter(Boolean) as string[])];
+  const requests = await prisma.fundingRequest.findMany({ where: { userId: user.id, date: { gte: fromDate, lte: toDate } }, include: { team: { include: { members: { where: { role: 'APPROVER' }, include: { user: { select: { name: true, email: true } } } } } } }, orderBy: { date: 'desc' } });
+  const approverEmails = [...new Set(requests.flatMap(r => [r.team.approverEmail, ...r.team.members.map(m => m.user.email)]).filter(Boolean) as string[])];
   const approvers = await prisma.user.findMany({ where: { email: { in: approverEmails, mode: 'insensitive' } }, select: { name: true, email: true } });
   const approverByEmail = new Map(approvers.map(a => [a.email?.toLowerCase(), a.name || a.email || 'Configured approver']));
   const total = requests.reduce((s, r) => s + (r.status === 'APPROVED' || r.status === 'PENDING' ? r.amount : 0), 0);
@@ -37,7 +37,7 @@ export default async function MyRequestsPage({ searchParams }: { searchParams: {
         <div className="grid grid-cols-[100px_1fr_140px_100px_110px_100px_90px] gap-3 border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <span>Needed</span><span>Description</span><span>Team</span><span className="text-right">Amount</span><span>Status</span><span>Approver</span><span className="text-right">Actions</span>
         </div>
-        {requests.map(r => { const approver = r.team.approverEmail ? (approverByEmail.get(r.team.approverEmail.toLowerCase()) || r.team.approverEmail) : 'Not configured'; return (
+        {requests.map(r => { const approver = [...new Set([r.team.approverEmail, ...r.team.members.map(m => m.user.email)].filter(Boolean) as string[])].map(e => approverByEmail.get(e.toLowerCase()) || e).join(', ') || 'Not configured'; return (
           <div key={r.id} className="border-b border-slate-100 px-4 py-3 text-sm last:border-0 hover:bg-slate-50">
             <div className="grid grid-cols-[100px_1fr_140px_100px_110px_100px_90px] items-center gap-3">
               <span className="text-slate-500">{fmtDate(r.date)}</span>
@@ -55,7 +55,7 @@ export default async function MyRequestsPage({ searchParams }: { searchParams: {
 
       {/* Mobile compact rows */}
       <div className="divide-y divide-slate-100 sm:hidden">
-        {requests.map(r => { const approver = r.team.approverEmail ? (approverByEmail.get(r.team.approverEmail.toLowerCase()) || r.team.approverEmail) : 'Not configured'; return (
+        {requests.map(r => { const approver = [...new Set([r.team.approverEmail, ...r.team.members.map(m => m.user.email)].filter(Boolean) as string[])].map(e => approverByEmail.get(e.toLowerCase()) || e).join(', ') || 'Not configured'; return (
           <div key={r.id} className="p-4">
             <div className="flex items-start justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><p className="truncate text-sm font-semibold text-slate-950">{r.description}</p><StatusPill status={r.status} /></div><p className="shrink-0 text-sm font-bold text-slate-950">{fmt(r.amount)}</p></div>
             <p className="mt-1 truncate text-xs text-slate-500">{r.team.name} · Needed {fmtDate(r.date)}</p>

@@ -7,8 +7,8 @@ export async function sendCombinedReport(start: Date, end: Date, opts: { manual?
     include: { user: true, team: true },
     orderBy: { date: 'asc' },
   });
-  const items = expenses.map((e) => ({ date: e.date.toISOString().slice(0, 10), teamName: e.team.name, userName: e.user.name ?? e.user.email ?? '', description: e.description, amount: e.amount }));
-  const label = `${start.toLocaleDateString('en-GB')} – ${new Date(end.getTime()-1).toLocaleDateString('en-GB')}`;
+  const items = expenses.map((e) => ({ date: e.date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }), teamName: e.team.name, userName: e.user.name ?? e.user.email ?? '', description: e.description, amount: e.amount }));
+  const label = `${start.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })} – ${new Date(end.getTime()-1).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}`;
   const pdf = await buildStatementPdf('All teams', label, items);
   if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured.');
   const recipients = (process.env.REPORT_RECIPIENTS || process.env.ADMIN_EMAILS || '').split(',').map((e) => e.trim()).filter(Boolean);
