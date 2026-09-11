@@ -15,8 +15,8 @@ export default function Sidebar({ name, email, isApprover, isAdmin, pendingCount
   }, [open]);
   const items = [
     { href: '/dashboard', label: 'Overview', icon: Wallet },
-    { href: '/dashboard/submit', label: 'New request', icon: PlusCircle },
-    { href: '/dashboard/my-requests', label: 'My requests', icon: FileText },
+    { href: '/dashboard/submit', label: 'New funding request', icon: PlusCircle },
+    { href: '/dashboard/my-requests', label: 'My funding requests', icon: FileText },
     ...(isApprover ? [{ href: '/dashboard/approvals', label: 'Approvals', icon: Inbox, badge: pendingCount }] : []),
     { href: '/dashboard/expenses', label: 'Expenses', icon: Receipt },
     { href: '/dashboard/budgets', label: 'Budgets & reports', icon: PiggyBank },
@@ -27,7 +27,7 @@ export default function Sidebar({ name, email, isApprover, isAdmin, pendingCount
     <>
       <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white lg:flex lg:min-h-screen lg:flex-col">
         <div className="border-b border-slate-100 px-6 py-6">
-          <div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-950 text-white"><Wallet size={20}/></div><div><p className="font-semibold text-slate-950">Proclaim</p><p className="text-xs text-slate-500">Expenses & budgeting</p></div></div>
+          <div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-950 text-white"><Wallet size={20}/></div><div><p className="font-semibold text-slate-950">Proclaim</p><p className="text-xs text-slate-500">Expense Management</p></div></div>
         </div>
         <nav className="flex-1 space-y-1 p-4">
           {items.map((it) => { const Icon=it.icon; const active=pathname===it.href || (it.href !== '/dashboard' && pathname.startsWith(it.href + '/')); return <Link key={it.href} href={it.href} className={`flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition ${active?'bg-slate-950 text-white shadow-sm':'text-slate-600 hover:bg-slate-100 hover:text-slate-950'}`}><span className="flex items-center gap-3"><Icon size={18}/>{it.label}</span>{'badge' in it && !!it.badge && <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-xs text-white">{it.badge}</span>}</Link> })}

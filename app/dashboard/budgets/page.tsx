@@ -12,5 +12,5 @@ export default async function BudgetsPage(){
  const barData=teams.map(t=>({name:t.name,Spent:Math.round(spendByTeam[t.id]||0),Target:t.budgetTarget}));
  const monthTotals:Record<string,number>={}; spent.forEach(e=>{const mk=e.date.toISOString().slice(0,7);monthTotals[mk]=(monthTotals[mk]||0)+e.amount;});
  const trendData=Object.keys(monthTotals).sort().map(mk=>({month:monthLabel(mk),Spend:Math.round(monthTotals[mk])}));
- return <div className="space-y-6"><div><p className="text-sm font-semibold text-emerald-600">Financial overview</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Budgets & reports</h1><p className="mt-2 text-sm text-slate-500">Track spend against team targets, then build a report for any date range.</p></div><BudgetCharts teams={teamSummaries} barData={barData} trendData={trendData}/></div>
+ return <div className="space-y-6"><div><p className="text-sm font-semibold text-emerald-600">Financial overview</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Budgets & reports</h1><p className="mt-2 text-sm text-slate-500">Track spend against team targets.</p></div><BudgetCharts teams={teamSummaries} barData={barData} trendData={trendData}/></div>
 }

@@ -27,7 +27,7 @@ export default async function MyRequestsPage({ searchParams }: { searchParams: {
   const total = requests.reduce((s, r) => s + (r.status === 'APPROVED' || r.status === 'PENDING' ? r.amount : 0), 0);
 
   return <div className="space-y-6">
-    <div><p className="text-sm font-semibold text-emerald-600">Requests</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Track your requests.</h1><p className="mt-2 text-sm text-slate-500">Look up any period below — it opens on this month by default.</p></div>
+    <div><p className="text-sm font-semibold text-emerald-600">Requests</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Track your funding requests.</h1><p className="mt-2 text-sm text-slate-500">Look up any period below, it opens on this month by default.</p></div>
     <DateRangeFilter from={from} to={to} />
     <div className="flex items-center justify-between"><h2 className="font-semibold text-slate-950">{requests.length} request{requests.length === 1 ? '' : 's'}</h2><span className="text-sm font-semibold text-slate-600">{fmt(total)} approved or pending</span></div>
 
