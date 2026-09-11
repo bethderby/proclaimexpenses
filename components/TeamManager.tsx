@@ -64,7 +64,7 @@ export default function TeamManager({teams=[],newButton=false}:{teams?:Team[];ne
                  </button>
                  <form action={deleteTeam}>
                    <input type="hidden" name="teamId" value={t.id}/>
-                   <FormButton pendingLabel="Deleting…" aria-label={`Delete ${t.name}`} title="Delete team" className="rounded-lg p-2 text-stone-500 hover:bg-rose-50 hover:text-rose-600">
+                   <FormButton pendingLabel="Deleting…" className="rounded-lg p-2 text-stone-500 hover:bg-rose-50 hover:text-rose-600">
                      <Trash2 size={17}/>
                    </FormButton>
                  </form>
