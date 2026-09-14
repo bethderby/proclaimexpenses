@@ -31,16 +31,20 @@ export async function GET(
 
   // New receipts are private. The public fallback is intentionally only for
   // legacy receipts uploaded before private Blob storage was enabled.
+  if (!expense.receiptUrl) {
+    return new NextResponse('No receipt has been uploaded for this expense yet', { status: 404 });
+  }
+  const receiptUrl = expense.receiptUrl;
   let blob = null;
   try {
-    blob = await get(expense.receiptUrl, { access: 'private' });
+    blob = await get(receiptUrl, { access: 'private' });
   } catch {
     // Legacy receipts were uploaded to the old public store. Keep them readable
     // through this authenticated route while new uploads are private.
   }
   if (!blob) {
     try {
-      blob = await get(expense.receiptUrl, { access: 'public' });
+      blob = await get(receiptUrl, { access: 'public' });
     } catch {
       blob = null;
     }
