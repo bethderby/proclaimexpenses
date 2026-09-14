@@ -1,65 +1,25 @@
 'use client';
 import { useState } from 'react';
-import { FileText, Paperclip, Pencil } from 'lucide-react';
+import { FileText, Paperclip, Pencil, XCircle } from 'lucide-react';
 import EditExpenseForm from './EditExpenseForm';
+import StatusPill from './StatusPill';
+import MarkPurchasedForm from './MarkPurchasedForm';
+import { cancelExpense } from '@/app/actions';
 
-const fmt = (n: number) => `£${n.toFixed(2)}`;
-const fmtDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const fmt=(n:number)=>`£${n.toFixed(2)}`;
+const fmtDate=(iso:string)=>new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+const modeLabel=(status:string,timing:string)=>status==='ALREADY_PURCHASED'?'Already purchased':timing==='ADVANCE'?'Advance requested':'Pay personally then reimburse';
 
-export default function ExpenseRow({
-  expense,
-  teams,
-  variant,
-}: {
-  expense: { id: string; date: string; description: string; amount: number; teamId: string; teamName: string; receiptUrl: string };
-  teams: { id: string; name: string }[];
-  variant: 'desktop' | 'mobile';
-}) {
-  const [editing, setEditing] = useState(false);
-
-  if (editing) {
-    // Full width regardless of variant — this is what was breaking on
-    // desktop before: the edit form was crammed into a 90px table cell.
-    return (
-      <div className="border-b border-slate-100 bg-slate-50/60 p-4 last:border-0">
-        <EditExpenseForm
-          expense={{ id: expense.id, date: expense.date, description: expense.description, amount: expense.amount, teamId: expense.teamId }}
-          teams={teams}
-          onDone={() => setEditing(false)}
-        />
-      </div>
-    );
-  }
-
-  if (variant === 'desktop') {
-    return (
-      <div className="grid grid-cols-[100px_1fr_140px_100px_90px] items-center gap-3 border-b border-slate-100 px-4 py-3 text-sm last:border-0 hover:bg-slate-50">
-        <span className="text-slate-500">{fmtDate(expense.date)}</span>
-        <span className="truncate font-medium text-slate-950">{expense.description}</span>
-        <span className="truncate text-slate-500">{expense.teamName}</span>
-        <span className="text-right font-semibold text-slate-950">{fmt(expense.amount)}</span>
-        <span className="flex items-center justify-end gap-1">
-          <a href={`/api/receipts/${expense.id}`} target="_blank" rel="noreferrer" title="View receipt" className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 active:scale-[.94]"><Paperclip size={15} /></a>
-          <button onClick={() => setEditing(true)} title="Edit" className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 active:scale-[.94]"><Pencil size={15} /></button>
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="border-b border-slate-100 p-4 last:border-0">
-      <div className="flex items-start gap-3">
-        <a href={`/api/receipts/${expense.id}`} target="_blank" rel="noreferrer" className="shrink-0">
-          {expense.receiptUrl.toLowerCase().endsWith('.pdf')
-            ? <div className="grid h-11 w-11 place-items-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600"><FileText size={16} /></div>
-            : <img src={`/api/receipts/${expense.id}`} alt="Receipt" className="h-11 w-11 rounded-lg border border-slate-200 object-cover bg-slate-50" />}
-        </a>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2"><p className="truncate text-sm font-semibold text-slate-950">{expense.description}</p><p className="shrink-0 text-sm font-bold text-slate-950">{fmt(expense.amount)}</p></div>
-          <p className="mt-0.5 truncate text-xs text-slate-500">{expense.teamName} · {fmtDate(expense.date)}</p>
-        </div>
-      </div>
-      <button onClick={() => setEditing(true)} className="mt-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 active:scale-[.97]">Edit</button>
-    </div>
-  );
+export default function ExpenseRow({ expense, teams, variant }:{ expense:{id:string;date:string;description:string;amount:number;teamId:string;teamName:string;receiptUrl:string|null;status:string;purchaseStatus:string; paymentTiming:string;receiptDueAt:string|null;paymentStatus:string}; teams:{id:string;name:string}[]; variant:'desktop'|'mobile' }){
+ const [editing,setEditing]=useState(false);
+ if(editing)return <div className="border-b border-slate-100 bg-slate-50/60 p-4"><EditExpenseForm expense={{id:expense.id,date:expense.date,description:expense.description,amount:expense.amount,teamId:expense.teamId}} teams={teams} onDone={()=>setEditing(false)}/></div>;
+ const actions=<div className="mt-3 flex flex-wrap items-center gap-2">
+   {expense.receiptUrl && <a href={`/api/receipts/${expense.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"><Paperclip size={13}/> Receipt</a>}
+   {(expense.status==='AWAITING_PURCHASE'||expense.status==='ADVANCE_PAID_AWAITING_RECEIPT') && <MarkPurchasedForm expenseId={expense.id}/>} 
+   {expense.status==='PENDING' && <button onClick={()=>setEditing(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"><Pencil size={13}/> Edit</button>}
+   {(expense.status==='PENDING'||expense.status==='AWAITING_PURCHASE') && <form action={cancelExpense}><input type="hidden" name="expenseId" value={expense.id}/><button className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700"><XCircle size={13}/> Cancel</button></form>}
+ </div>;
+ const detail=<><div className="flex flex-wrap gap-2"><span className="rounded-full bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">{modeLabel(expense.purchaseStatus, expense.paymentTiming)}</span>{expense.receiptUrl && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">Receipt attached</span>}{(expense.status==='AWAITING_PURCHASE'||expense.status==='ADVANCE_PAID_AWAITING_RECEIPT')&&<span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">Receipt will be requested after purchase</span>}</div>{expense.receiptDueAt&&expense.status!=='PAID'&&<p className="mt-2 text-xs text-slate-500">Receipt reminder scheduled for {fmtDate(expense.receiptDueAt.slice(0,10))}.</p>}{actions}</>;
+ if(variant==='desktop')return <div className="border-b border-slate-100 px-4 py-4 last:border-0 hover:bg-slate-50"><div className="grid grid-cols-[100px_1fr_140px_100px_170px] items-start gap-3"><span className="pt-1 text-slate-500">{fmtDate(expense.date)}</span><div className="min-w-0"><p className="truncate font-medium text-slate-950">{expense.description}</p><div className="mt-2"><StatusPill status={expense.status}/></div></div><span className="truncate pt-1 text-slate-500">{expense.teamName}</span><span className="pt-1 text-right font-semibold text-slate-950">{fmt(expense.amount)}</span><div className="text-right">{expense.receiptUrl?<a href={`/api/receipts/${expense.id}`} target="_blank" rel="noreferrer" title="View receipt" className="inline-grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100"><Paperclip size={15}/></a>:<span className="text-xs text-slate-400">No receipt</span>}{expense.status==='PENDING'&&<button onClick={()=>setEditing(true)} title="Edit" className="ml-1 inline-grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100"><Pencil size={15}/></button>}</div></div><div className="ml-[103px] mt-2">{detail}</div></div>;
+ return <div className="border-b border-slate-100 p-4 last:border-0"><div className="flex items-start gap-3">{expense.receiptUrl?<a href={`/api/receipts/${expense.id}`} target="_blank" rel="noreferrer" className="shrink-0">{expense.receiptUrl.toLowerCase().endsWith('.pdf')?<div className="grid h-11 w-11 place-items-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600"><FileText size={16}/></div>:<img src={`/api/receipts/${expense.id}`} alt="Receipt" className="h-11 w-11 rounded-lg border border-slate-200 object-cover bg-slate-50"/>}</a>:<div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-slate-50 text-slate-400"><FileText size={16}/></div>}<div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><p className="truncate text-sm font-semibold text-slate-950">{expense.description}</p><p className="shrink-0 text-sm font-bold text-slate-950">{fmt(expense.amount)}</p></div><p className="mt-0.5 truncate text-xs text-slate-500">{expense.teamName} · {fmtDate(expense.date)}</p><div className="mt-2"><StatusPill status={expense.status}/></div>{detail}</div></div></div>;
 }

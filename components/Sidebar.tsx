@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import { PlusCircle, FileText, Receipt, Inbox, BarChart3, Wallet, Users, LogOut, Menu, X } from 'lucide-react';
+import { Receipt, Inbox, BarChart3, Wallet, Users, LogOut, Menu, X, CreditCard } from 'lucide-react';
 
 export default function Sidebar({ name, email, isApprover, isAdmin, pendingCount }: { name: string; email: string; isApprover: boolean; isAdmin: boolean; pendingCount: number }) {
   const pathname = usePathname();
@@ -15,10 +15,9 @@ export default function Sidebar({ name, email, isApprover, isAdmin, pendingCount
   }, [open]);
   const items = [
     { href: '/dashboard', label: 'Overview', icon: Wallet },
-    { href: '/dashboard/submit', label: 'New funding request', icon: PlusCircle },
-    { href: '/dashboard/my-requests', label: 'My funding requests', icon: FileText },
-    ...(isApprover ? [{ href: '/dashboard/approvals', label: 'Approvals', icon: Inbox, badge: pendingCount }] : []),
+    
     { href: '/dashboard/expenses', label: 'Expenses', icon: Receipt },
+    ...(isApprover ? [{ href: '/dashboard/approvals', label: 'Approvals', icon: Inbox, badge: pendingCount }, { href: '/dashboard/payments', label: 'Payments', icon: CreditCard }] : []),
     { href: '/dashboard/budgets', label: 'Reports', icon: BarChart3 },
     ...(isAdmin ? [{ href: '/dashboard/teams', label: 'Admin Portal', icon: Users }] : []),
   ];

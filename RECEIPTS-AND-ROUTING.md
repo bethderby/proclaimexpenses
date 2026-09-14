@@ -1,35 +1,35 @@
-# Receipts and approval routing changes
+# Receipts, approvals and routing
 
-## What changed
+## Current workflow
 
-- Receipt uploads now use Vercel Blob `access: 'private'`.
-- JPG, PNG, WebP, HEIC/HEIF and PDF receipts are accepted, up to 10 MB.
-- Uploads return a short-lived preview URL; the database stores the private Blob URL.
-- `/api/receipts/[expenseId]` checks the signed-in user before streaming a receipt.
-- Receipt access is allowed for the expense owner, an admin, or the configured approver for that expense's team.
-- Legacy public receipts are still served through the authenticated route for compatibility.
-- Request routing is based only on the selected team's `approverEmail`.
-- Team membership is not required for submitting requests or approving them.
-- The same person can be the approver for multiple teams.
-- When Resend is configured, submitting a request sends a notification to that team's approver.
-- Admin Portal now creates/edits the approver email directly on each team.
-- Linking an approved request to an expense is now server-validated against the current user and team.
+The app now routes **expenses**, not separate funding requests.
 
-## Vercel Blob requirement
+- A user chooses a team on the expense form.
+- The team determines the approver(s).
+- Already-purchased expenses require a receipt before submission.
+- Expenses that have not yet been purchased can be submitted without a receipt.
+- `NEEDS_ADVANCE` means the approved expense can be placed into a payment run before purchase.
+- `WILL_PURCHASE_LATER` means approval does not create a payment; the requester must later mark the expense purchased and upload the receipt.
+- Approval and rejection notifications are sent with Resend when configured.
 
-The Blob store used for new receipts must be a **Private** Blob store. Vercel Private Blob is now generally available. If the existing store was created as a public store, create/connect a private store for receipts rather than changing the application back to public access.
+## Receipt reminders
 
-The project uses the Vercel Blob SDK already present in `package-lock.json`. New Vercel deployments can use OIDC authentication automatically when the private store is connected to the project.
+For future purchases, `receiptDueAt` is set to seven days after submission. The daily Vercel Cron endpoint `/api/cron/receipt-reminders` sends a reminder when a receipt is still missing and moves the next reminder out by another seven days.
+
+Advance payments are also reminded after the payment run is marked paid, because the receipt is still required after purchase.
+
+## Private receipt storage
+
+Receipt uploads use private Vercel Blob storage. `/api/receipts/[expenseId]` checks the signed-in user, expense owner, team approver or admin before streaming a receipt.
+
+## Payment details
+
+Bank account name, sort code and account number are encrypted with AES-256-GCM using `BANK_DETAILS_ENCRYPTION_KEY` before being stored. The key must be kept in the deployment secret store and must not be committed.
+
+## Payment runs
+
+The app does not automate Co-op login or collect banking credentials. It creates a payment run from `READY_TO_PAY` expenses, exports payment instructions, and lets an authorised user perform the payment in the charity's Co-op banking service. The user then marks the run paid in Proclaim Expenses.
 
 ## Environment
 
-Do not commit `.env` files. Configure the deployment environment with the values from your own private environment. For request notifications, set:
-
-- `RESEND_API_KEY`
-- `RESEND_FROM` (a verified Resend sender)
-
-Database/auth variables remain as documented in `.env.example`.
-
-## Verification
-
-`npx tsc --noEmit` passes on the patched source. A full `next build` could not be completed in the patching environment because the environment could not reach `registry.npmjs.org` to download Next.js's native SWC binary; this is an environment/network limitation, not a TypeScript error in the patched source.
+Do not commit `.env` files. Configure the deployment environment with the values from your own private environment. For email notifications/reminders, set `RESEND_API_KEY` and `RESEND_FROM`. Set `CRON_SECRET` for the Vercel cron endpoints and `BANK_DETAILS_ENCRYPTION_KEY` for encrypted bank details.

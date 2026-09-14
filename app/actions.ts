@@ -5,6 +5,9 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { encryptBankDetail } from '@/lib/bank';
+import { createWiseBatchGroup, addWiseBatchTransfer, completeWiseBatchGroup, createWiseQuote, createWiseRecipient, getWiseBatchGroup, getWiseTransfer, isWiseConfigured } from '@/lib/wise';
+import { decryptBankDetail } from '@/lib/bank';
 
 function escapeHtml(value: string) { return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] || char)); }
 
@@ -14,106 +17,74 @@ async function requireUser() {
   return session.user as any;
 }
 
-// Ask for permission to spend money. Goes to the chosen team's approver.
-export async function submitRequest(formData: FormData) {
-  const user = await requireUser();
-
-  const teamId = String(formData.get('teamId') || '');
-  const date = String(formData.get('date') || '');
-  const description = (formData.get('description') as string)?.trim();
-  const amount = parseFloat(String(formData.get('amount') || ''));
-
-  if (!teamId) throw new Error('Choose which team this request is for.');
-  if (!description || !amount || amount <= 0) {
-    throw new Error('Add a description and an amount greater than zero.');
-  }
-  if (!date || Number.isNaN(new Date(date).getTime())) throw new Error('Choose a valid date.');
-
+async function getTeamApproverEmails(teamId: string) {
   const team = await prisma.team.findUnique({ where: { id: teamId }, include: { members: { where: { role: 'APPROVER' }, include: { user: { select: { email: true } } } } } });
   if (!team) throw new Error('That team no longer exists.');
-  const approverEmails = [...new Set([team.approverEmail, ...team.members.map(m => m.user.email)].filter(Boolean).map(e => e!.toLowerCase()))];
-  if (!approverEmails.length) throw new Error('That team does not have an approver configured yet. Ask an admin to set one.');
-
-  const request = await prisma.fundingRequest.create({
-    data: {
-      date: new Date(date),
-      description,
-      amount,
-      status: 'PENDING',
-      teamId,
-      userId: user.id,
-    },
-  });
-
-  // Routing is determined solely by the selected team. One user can submit
-  // requests to any number of teams; no team membership is required.
-  if (process.env.RESEND_API_KEY && process.env.RESEND_FROM) {
-    try {
-      const { Resend } = await import('resend');
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      const requester = escapeHtml(user.name || user.email || 'A team member');
-      const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
-      const approvalUrl = `${appUrl}/dashboard/approvals`;
-      const result = await resend.emails.send({
-        from: process.env.RESEND_FROM,
-        to: approverEmails,
-        subject: `Expense request needs approval — £${amount.toFixed(2)}`,
-        html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a"><h2 style="margin-bottom:8px">New expense request</h2><p style="color:#64748b">${requester} submitted a request for <strong>${escapeHtml(team.name)}</strong>.</p><div style="padding:18px;border:1px solid #e2e8f0;border-radius:14px;margin:20px 0"><p style="margin:0 0 8px;font-size:20px;font-weight:700">£${amount.toFixed(2)}</p><p style="margin:0;color:#475569">${escapeHtml(description)}</p></div>${approvalUrl ? `<a href="${approvalUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Review request</a>` : '<p>Open Proclaim Expenses to review the request.</p>'}<p style="margin-top:28px;font-size:12px;color:#94a3b8">Proclaim Expenses</p></div>`,
-        text: `${requester} submitted a £${amount.toFixed(2)} request for ${escapeHtml(team.name)}.\n\n${escapeHtml(description)}\n\n${approvalUrl || 'Open Proclaim Expenses to approve or reject it.'}`,
-      });
-      if (result.error) console.error('Approver notification failed', result.error);
-    } catch (error) {
-      console.error('Approver notification failed', error);
-    }
-  }
-
-  revalidatePath('/dashboard/my-requests');
-  revalidatePath('/dashboard/approvals');
-  redirect('/dashboard/my-requests');
+  const emails = [...new Set([team.approverEmail, ...team.members.map(m => m.user.email)].filter(Boolean).map(e => e!.toLowerCase()))];
+  if (!emails.length) throw new Error('That team does not have an approver configured yet. Ask an admin to set one.');
+  return { team, approverEmails: emails };
 }
 
-// Record money that has actually been spent, backed by a receipt.
+async function notify(to: string | string[], subject: string, html: string, text: string) {
+  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM) return;
+  try {
+    const { Resend } = await import('resend');
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const result = await resend.emails.send({ from: process.env.RESEND_FROM, to, subject, html, text });
+    if (result.error) console.error('Email notification failed', result.error);
+  } catch (error) { console.error('Email notification failed', error); }
+}
+
 export async function submitExpense(formData: FormData) {
   const user = await requireUser();
-
   const teamId = String(formData.get('teamId') || '');
   const date = String(formData.get('date') || '');
   const description = (formData.get('description') as string)?.trim();
   const amount = parseFloat(String(formData.get('amount') || ''));
-  const receiptUrl = String(formData.get('receiptUrl') || '');
-  const requestId = String(formData.get('requestId') || '') || null;
+  const receiptUrl = String(formData.get('receiptUrl') || '') || null;
+  const purchaseStatus = String(formData.get('purchaseStatus') || '') as 'ALREADY_PURCHASED' | 'NOT_PURCHASED';
+  const paymentTiming = String(formData.get('paymentTiming') || '') as 'AFTER_PURCHASE' | 'ADVANCE';
 
   if (!teamId) throw new Error('Choose which team this expense is for.');
-  if (!description || !amount || amount <= 0) {
-    throw new Error('Add a description and an amount greater than zero.');
-  }
+  if (!description || !amount || amount <= 0) throw new Error('Add a description and an amount greater than zero.');
   if (!date || Number.isNaN(new Date(date).getTime())) throw new Error('Choose a valid date.');
-  if (!receiptUrl) throw new Error('Upload a receipt.');
+  if (!['ALREADY_PURCHASED', 'NOT_PURCHASED'].includes(purchaseStatus)) throw new Error('Choose whether the item has already been purchased.');
+  if (!['AFTER_PURCHASE', 'ADVANCE'].includes(paymentTiming)) throw new Error('Choose when you need the money.');
+  if (purchaseStatus === 'ALREADY_PURCHASED' && !receiptUrl) throw new Error('A receipt is required when the item has already been purchased.');
+  if (purchaseStatus === 'ALREADY_PURCHASED' && paymentTiming !== 'AFTER_PURCHASE') throw new Error('An already-purchased expense cannot request an advance.');
 
-  const team = await prisma.team.findUnique({ where: { id: teamId } });
-  if (!team) throw new Error('That team no longer exists.');
+  const { team, approverEmails } = await getTeamApproverEmails(teamId);
+  const isAlreadyPurchased = purchaseStatus === 'ALREADY_PURCHASED';
+  const receiptDueAt = isAlreadyPurchased ? null : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-  if (requestId) {
-    const request = await prisma.fundingRequest.findFirst({
-      where: { id: requestId, userId: user.id, teamId, status: 'APPROVED' },
-    });
-    if (!request) throw new Error('The selected request is not a valid approved request for this team.');
-  }
-
-  await prisma.expense.create({
+  const expense = await prisma.expense.create({
     data: {
-      date: new Date(date),
-      description,
-      amount,
-      receiptUrl,
-      teamId,
-      userId: user.id,
-      requestId: requestId || undefined,
+      date: new Date(date), description, amount, receiptUrl, teamId, userId: user.id,
+      purchaseStatus,
+      paymentTiming,
+      status: 'PENDING',
+      receiptDueAt,
+      purchasedAt: isAlreadyPurchased ? new Date(date) : null,
     },
   });
 
-  revalidatePath('/dashboard/expenses');
-  revalidatePath('/dashboard/budgets');
+  const requester = escapeHtml(user.name || user.email || 'A team member');
+  const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+  const approvalUrl = `${appUrl}/dashboard/approvals`;
+  const purchaseText = purchaseStatus === 'ALREADY_PURCHASED'
+    ? 'The item has already been purchased and a receipt is attached.'
+    : paymentTiming === 'ADVANCE'
+      ? 'The requester has not bought the item and needs an advance before purchase.'
+      : 'The requester has not bought the item and can pay personally after approval, then claim reimbursement with a receipt.';
+
+  await notify(
+    approverEmails,
+    `Expense needs approval — £${amount.toFixed(2)}`,
+    `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a"><h2>New expense needs approval</h2><p style="color:#64748b">${requester} submitted an expense for <strong>${escapeHtml(team.name)}</strong>.</p><div style="padding:18px;border:1px solid #e2e8f0;border-radius:14px;margin:20px 0"><p style="margin:0 0 8px;font-size:20px;font-weight:700">£${amount.toFixed(2)}</p><p style="margin:0;color:#475569">${escapeHtml(description)}</p><p style="margin:8px 0 0;color:#64748b">${escapeHtml(purchaseText)}</p></div>${approvalUrl ? `<a href="${approvalUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Review expense</a>` : ''}<p style="margin-top:28px;font-size:12px;color:#94a3b8">Proclaim Expenses</p></div>`,
+    `${requester} submitted a £${amount.toFixed(2)} expense for ${team.name}.\n\n${description}\n\n${purchaseText}\n\n${approvalUrl || 'Open Proclaim Expenses to review it.'}`
+  );
+
+  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard');
   redirect('/dashboard/expenses');
 }
 
@@ -124,76 +95,196 @@ export async function updateExpense(formData: FormData) {
   const date = String(formData.get('date') || '');
   const description = (formData.get('description') as string)?.trim();
   const amount = parseFloat(String(formData.get('amount') || ''));
-
   if (!expenseId || !teamId) throw new Error('Expense not found.');
   if (!description || !amount || amount <= 0) throw new Error('Add a description and an amount greater than zero.');
   if (!date || Number.isNaN(new Date(date).getTime())) throw new Error('Choose a valid date.');
   const expense = await prisma.expense.findFirst({ where: { id: expenseId, userId: user.id } });
   if (!expense) throw new Error('You can only edit your own expenses.');
+  if (expense.status !== 'PENDING') throw new Error('Only expenses still awaiting approval can be edited.');
   const team = await prisma.team.findUnique({ where: { id: teamId } });
   if (!team) throw new Error('That team no longer exists.');
-
-  await prisma.expense.update({
-    where: { id: expenseId },
-    data: { date: new Date(date), description, amount, teamId },
-  });
-  revalidatePath('/dashboard/expenses');
-  revalidatePath('/dashboard/budgets');
+  await prisma.expense.update({ where: { id: expenseId }, data: { date: new Date(date), description, amount, teamId } });
+  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard');
 }
 
-export async function decideRequest(requestId: string, status: 'APPROVED' | 'REJECTED', note: string) {
+export async function cancelExpense(formData: FormData) {
   const user = await requireUser();
-  const request = await prisma.fundingRequest.findUnique({ where: { id: requestId }, include: { team: { include: { members: { where: { role: 'APPROVER' }, include: { user: { select: { email: true } } } } } }, user: true } });
-  if (!request) throw new Error('Request not found.');
-  const isAdmin = !!user.isAdmin;
-  const approverEmail = (user.email ?? '').toLowerCase();
-  const isTeamApprover = !!approverEmail && ([request.team.approverEmail, ...request.team.members.map(m => m.user.email)].filter(Boolean) as string[]).some(e => e.toLowerCase() === approverEmail);
-  if (!isAdmin && !isTeamApprover) throw new Error("Only this team's configured approver can decide this request.");
-  if (request.status !== 'PENDING') throw new Error('This request has already been decided.');
+  const expenseId = String(formData.get('expenseId') || '');
+  const expense = await prisma.expense.findUnique({ where: { id: expenseId } });
+  if (!expense || expense.userId !== user.id) throw new Error('Expense not found.');
+  if (expense.status !== 'PENDING' && expense.status !== 'AWAITING_PURCHASE') throw new Error('This expense can no longer be cancelled.');
+  await prisma.expense.update({ where: { id: expenseId }, data: { status: 'CANCELLED' } });
+  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard');
+}
 
-  await prisma.fundingRequest.update({
-    where: { id: requestId },
-    data: { status, decisionNote: note || null, decidedAt: new Date() },
-  });
+export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'REJECTED', note: string) {
+  const user = await requireUser();
+  const expense = await prisma.expense.findUnique({ where: { id: expenseId }, include: { team: { include: { members: { where: { role: 'APPROVER' }, include: { user: { select: { email: true } } } } } }, user: true } });
+  if (!expense) throw new Error('Expense not found.');
+  const email = (user.email ?? '').toLowerCase();
+  const isTeamApprover = !!email && ([expense.team.approverEmail, ...expense.team.members.map(m => m.user.email)].filter(Boolean) as string[]).some(e => e.toLowerCase() === email);
+  if (!user.isAdmin && !isTeamApprover) throw new Error("Only this team's configured approver can decide this expense.");
+  if (expense.status !== 'PENDING') throw new Error('This expense has already been decided.');
+  if (decision === 'APPROVED' && expense.purchaseStatus === 'ALREADY_PURCHASED' && !expense.receiptUrl) throw new Error('A receipt is required before an already-purchased expense can be approved.');
 
-  if (process.env.RESEND_API_KEY && process.env.RESEND_FROM && request.user.email) {
-    try {
-      const { Resend } = await import('resend');
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
-      const requestsUrl = `${appUrl}/dashboard/my-requests`;
-      const approved = status === 'APPROVED';
-      const heading = approved ? 'Your expense request was approved' : 'Your expense request was declined';
-      const intro = approved ? 'Good news — your request has been approved.' : 'Your request was not approved.';
-      const result = await resend.emails.send({
-        from: process.env.RESEND_FROM,
-        to: request.user.email,
-        subject: `${approved ? 'Approved' : 'Declined'} expense request — £${request.amount.toFixed(2)}`,
-        html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a"><h2 style="margin-bottom:8px">${heading}</h2><p style="color:#64748b">${intro}</p><div style="padding:18px;border:1px solid #e2e8f0;border-radius:14px;margin:20px 0"><p style="margin:0 0 8px;font-size:20px;font-weight:700">£${request.amount.toFixed(2)}</p><p style="margin:0;color:#475569">${request.description}</p><p style="margin:8px 0 0;color:#64748b">${request.team.name}</p>${note ? `<p style="margin:14px 0 0;color:#475569"><strong>Note:</strong> ${escapeHtml(note)}</p>` : ''}</div>${requestsUrl ? `<a href="${requestsUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">View my requests</a>` : ''}<p style="margin-top:28px;font-size:12px;color:#94a3b8">Proclaim Expenses</p></div>`,
-        text: `${heading}.\n\n£${request.amount.toFixed(2)} — ${request.description} — ${request.team.name}.\n\n${note ? `Note: ${note}\n\n` : ''}${requestsUrl || 'Open Proclaim Expenses to view your requests.'}`,
-      });
-      if (result.error) console.error('Requester notification failed', result.error);
-    } catch (error) {
-      console.error('Requester notification failed', error);
-    }
+  let nextStatus: 'APPROVED' | 'AWAITING_PURCHASE' | 'READY_TO_PAY' = 'APPROVED';
+  let paymentStatus: 'NOT_READY' | 'READY' = 'NOT_READY';
+  if (decision === 'APPROVED') {
+    if (expense.purchaseStatus === 'NOT_PURCHASED') nextStatus = 'AWAITING_PURCHASE';
+    else nextStatus = 'READY_TO_PAY';
+    if (expense.purchaseStatus === 'ALREADY_PURCHASED') paymentStatus = 'READY';
+    else if (expense.paymentTiming === 'ADVANCE') paymentStatus = 'READY';
   }
 
-  revalidatePath('/dashboard/approvals');
-  revalidatePath('/dashboard/my-requests');
+  await prisma.expense.update({ where: { id: expenseId }, data: { status: decision === 'REJECTED' ? 'REJECTED' : nextStatus, paymentStatus, approvedAmount: decision === 'APPROVED' ? expense.amount : null, decisionNote: note || null, decidedAt: new Date() } });
+
+  if (expense.user.email) {
+    const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+    const expensesUrl = `${appUrl}/dashboard/expenses`;
+    const approved = decision === 'APPROVED';
+    const extra = expense.purchaseStatus === 'NOT_PURCHASED' && expense.paymentTiming === 'ADVANCE' && approved
+      ? 'Because you requested an advance, this expense can now be included in a Wise payment run. After you buy the item, upload the receipt and enter the actual amount.'
+      : expense.purchaseStatus === 'NOT_PURCHASED' && approved
+        ? 'Once you buy the item, open this expense, mark it as purchased, upload the receipt and it will become ready for reimbursement.'
+        : approved ? 'It can now move to payment.' : 'The approver did not approve this expense.';
+    await notify(
+      expense.user.email,
+      `${approved ? 'Approved' : 'Declined'} expense — £${expense.amount.toFixed(2)}`,
+      `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a"><h2>${approved ? 'Your expense was approved' : 'Your expense was declined'}</h2><p style="color:#64748b">${escapeHtml(extra)}</p><div style="padding:18px;border:1px solid #e2e8f0;border-radius:14px;margin:20px 0"><p style="margin:0 0 8px;font-size:20px;font-weight:700">£${expense.amount.toFixed(2)}</p><p style="margin:0">${escapeHtml(expense.description)}</p>${note ? `<p style="margin:14px 0 0;color:#475569"><strong>Note:</strong> ${escapeHtml(note)}</p>` : ''}</div>${expensesUrl ? `<a href="${expensesUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">View expense</a>` : ''}</div>`,
+      `${approved ? 'Approved' : 'Declined'} expense: £${expense.amount.toFixed(2)} — ${expense.description}.\n\n${extra}${note ? `\n\nNote: ${note}` : ''}`
+    );
+  }
+
+  revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard');
 }
 
-export async function cancelRequest(formData: FormData) {
+export async function markExpensePurchased(formData: FormData) {
   const user = await requireUser();
-  const requestId = String(formData.get('requestId') || '');
-  if (!requestId) throw new Error('Request not found.');
-  const request = await prisma.fundingRequest.findUnique({ where: { id: requestId } });
-  if (!request || request.userId !== user.id) throw new Error('Request not found.');
-  if (request.status !== 'PENDING') throw new Error('Only requests still awaiting a decision can be cancelled.');
+  const expenseId = String(formData.get('expenseId') || '');
+  const date = String(formData.get('purchaseDate') || '');
+  const receiptUrl = String(formData.get('receiptUrl') || '') || null;
+  const actualAmount = parseFloat(String(formData.get('actualAmount') || ''));
+  if (!expenseId || !date || Number.isNaN(new Date(date).getTime())) throw new Error('Choose a valid purchase date.');
+  if (!receiptUrl) throw new Error('Upload the receipt before confirming the purchase.');
+  if (!actualAmount || actualAmount <= 0) throw new Error('Enter the actual amount shown on the receipt.');
+  const expense = await prisma.expense.findUnique({ where: { id: expenseId } });
+  if (!expense || expense.userId !== user.id) throw new Error('Expense not found.');
+  if (expense.status !== 'AWAITING_PURCHASE' && expense.status !== 'ADVANCE_PAID_AWAITING_RECEIPT') throw new Error('This expense is not waiting for a purchase or receipt.');
 
-  await prisma.fundingRequest.update({ where: { id: requestId }, data: { status: 'CANCELLED', decidedAt: new Date() } });
+  if (expense.status === 'ADVANCE_PAID_AWAITING_RECEIPT') {
+    const advance = expense.advanceAmount ?? expense.amount;
+    const difference = Number((advance - actualAmount).toFixed(2));
+    let status: 'PAID' | 'BALANCE_TO_RETURN' | 'ADDITIONAL_REIMBURSEMENT_REQUIRED';
+    let settlementStatus: 'SETTLED' | 'BALANCE_TO_RETURN' | 'ADDITIONAL_REIMBURSEMENT_REQUIRED';
+    let settlementNote: string | null = null;
+    if (difference === 0) { status = 'PAID'; settlementStatus = 'SETTLED'; }
+    else if (difference > 0) { status = 'PAID'; settlementStatus = 'BALANCE_TO_RETURN'; settlementNote = `£${difference.toFixed(2)} of the advance is due back to the charity.`; }
+    else { status = 'PAID'; settlementStatus = 'ADDITIONAL_REIMBURSEMENT_REQUIRED'; settlementNote = `£${Math.abs(difference).toFixed(2)} additional reimbursement is due to the requester.`; }
+    await prisma.expense.update({ where: { id: expenseId }, data: { purchasedAt: new Date(date), receiptUrl, actualAmount, receiptDueAt: null, lastReminderAt: null, status, settlementStatus, settlementNote } });
+  } else {
+    await prisma.expense.update({ where: { id: expenseId }, data: { purchasedAt: new Date(date), receiptUrl, actualAmount, receiptDueAt: null, lastReminderAt: null, status: 'READY_TO_PAY', paymentStatus: 'READY', settlementStatus: 'NOT_APPLICABLE' } });
+  }
+  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard'); revalidatePath('/dashboard/payments');
+}
 
-  revalidatePath('/dashboard/my-requests');
-  revalidatePath('/dashboard/approvals');
+export async function updateBankDetails(formData: FormData) {
+  const user = await requireUser();
+  const accountName = String(formData.get('bankAccountName') || '').trim();
+  const sortCode = String(formData.get('bankSortCode') || '').replace(/\D/g, '');
+  const accountNumber = String(formData.get('bankAccountNumber') || '').replace(/\D/g, '');
+  if (!accountName) throw new Error('Enter the account name.');
+  if (!/^\d{6}$/.test(sortCode)) throw new Error('Sort code must contain 6 digits.');
+  if (!/^\d{8}$/.test(accountNumber)) throw new Error('Account number must contain 8 digits.');
+  await prisma.user.update({ where: { id: user.id }, data: { bankAccountName: encryptBankDetail(accountName), bankSortCode: encryptBankDetail(sortCode), bankAccountNumber: encryptBankDetail(accountNumber) } });
+  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/payments');
+}
+
+export async function createWisePaymentRun() {
+  const user = await requireUser();
+  if (!user.isAdmin && !user.isApprover) throw new Error('Only approvers or admins can create payment runs.');
+  if (!isWiseConfigured()) throw new Error('Wise is not configured. Add WISE_API_TOKEN and WISE_PROFILE_ID first.');
+  const where: any = user.isAdmin
+    ? { status: 'READY_TO_PAY' }
+    : { status: 'READY_TO_PAY', team: { OR: [{ approverEmail: { equals: user.email, mode: 'insensitive' } }, { members: { some: { userId: user.id, role: 'APPROVER' } } }] } };
+  const expenses = await prisma.expense.findMany({ where, include: { user: true }, orderBy: { submittedAt: 'asc' } });
+  const eligible = expenses.filter(e => e.user.bankAccountName && e.user.bankSortCode && e.user.bankAccountNumber);
+  if (!eligible.length) throw new Error('No ready expenses with complete bank details are available for your teams.');
+
+  const reference = `WISE-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.random().toString(36).slice(2,7).toUpperCase()}`;
+  const batch = await createWiseBatchGroup(`Proclaim Expenses ${reference}`);
+  const created: Array<{ id: string; transferId?: number; recipientId?: number }> = [];
+  try {
+    for (const expense of eligible) {
+      let recipientId = expense.wiseRecipientId ?? undefined;
+      if (!recipientId) {
+        const recipient = await createWiseRecipient({
+          name: decryptBankDetail(expense.user.bankAccountName!),
+          sortCode: decryptBankDetail(expense.user.bankSortCode!),
+          accountNumber: decryptBankDetail(expense.user.bankAccountNumber!),
+        });
+        recipientId = Number(recipient.id);
+      }
+      const quote = await createWiseQuote(recipientId, expense.amount);
+      const transfer = await addWiseBatchTransfer(String(batch.id), { targetAccount: recipientId, quoteUuid: quote.id || quote.uuid, reference });
+      created.push({ id: expense.id, recipientId, transferId: Number(transfer.id) });
+    }
+    const completedBatch = await completeWiseBatchGroup(String(batch.id), Number(batch.version));
+    await prisma.$transaction(async tx => {
+      const run = await tx.paymentRun.create({ data: { reference, totalAmount: eligible.reduce((s,e) => s + e.amount, 0), createdById: user.id, wiseBatchGroupId: String(batch.id), wiseStatus: completedBatch.status || 'COMPLETED', status: 'WISE_PREPARED' } });
+      for (const item of created) {
+        await tx.expense.update({ where: { id: item.id }, data: { paymentRunId: run.id, paymentStatus: 'EXPORTED', status: 'PAYMENT_PENDING', paymentReference: reference, wiseRecipientId: item.recipientId, wiseTransferId: item.transferId, wiseBatchGroupId: String(batch.id), wiseStatus: 'prepared' } });
+      }
+    });
+  } catch (error) {
+    console.error('Wise payment run preparation failed', error);
+    throw error;
+  }
+  revalidatePath('/dashboard/payments'); revalidatePath('/dashboard/expenses');
+}
+
+export async function syncWisePaymentRun(formData: FormData) {
+  const user = await requireUser();
+  if (!user.isAdmin && !user.isApprover) throw new Error('Only approvers or admins can sync payment runs.');
+  const runId = String(formData.get('runId') || '');
+  const run = await prisma.paymentRun.findUnique({ where: { id: runId }, include: { expenses: true } });
+  if (!run?.wiseBatchGroupId) throw new Error('Wise batch not found for this payment run.');
+  const batch = await getWiseBatchGroup(run.wiseBatchGroupId);
+  const transfers = await Promise.all(run.expenses.filter(e => e.wiseTransferId).map(e => getWiseTransfer(e.wiseTransferId!)));
+  const statuses = transfers.map(t => String(t.status || '').toLowerCase());
+  const allComplete = statuses.length > 0 && statuses.every(s => ['outgoing_payment_sent','bounced_back','funds_refunded','cancelled'].includes(s));
+  const anyFailed = statuses.some(s => ['bounced_back','funds_refunded','cancelled'].includes(s));
+  await prisma.$transaction(async tx => {
+    await tx.paymentRun.update({ where: { id: runId }, data: { wiseStatus: batch.status || 'COMPLETED', status: allComplete && !anyFailed ? 'COMPLETED' : 'WISE_PREPARED', ...(allComplete && !anyFailed ? { completedAt: new Date() } : {}) } });
+    for (const t of transfers) {
+      const expense = run.expenses.find(e => e.wiseTransferId === Number(t.id));
+      if (!expense) continue;
+      const state = String(t.status || 'unknown');
+      if (['outgoing_payment_sent'].includes(state)) {
+        if (expense.paymentTiming === 'ADVANCE') {
+          await tx.expense.update({ where: { id: expense.id }, data: { status: 'ADVANCE_PAID_AWAITING_RECEIPT', paymentStatus: 'PAID', paidAt: new Date(), advanceAmount: expense.amount, settlementStatus: 'AWAITING_RECEIPT', receiptDueAt: new Date(Date.now()+7*24*60*60*1000), wiseStatus: state } });
+        } else {
+          await tx.expense.update({ where: { id: expense.id }, data: { status: 'PAID', paymentStatus: 'PAID', paidAt: new Date(), wiseStatus: state } });
+        }
+      } else {
+        await tx.expense.update({ where: { id: expense.id }, data: { wiseStatus: state, ...(anyFailed ? { status: 'PAYMENT_FAILED', paymentStatus: 'FAILED' } : {}) } });
+      }
+    }
+  });
+  revalidatePath('/dashboard/payments'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard');
+}
+
+export async function cancelPaymentRun(formData: FormData) {
+  const user = await requireUser();
+  if (!user.isAdmin && !user.isApprover) throw new Error('Only approvers or admins can cancel payment runs.');
+  const runId = String(formData.get('runId') || '');
+  const run = await prisma.paymentRun.findUnique({ where: { id: runId } });
+  if (!run) throw new Error('Payment run not found.');
+  if (run.status === 'COMPLETED') throw new Error('A completed payment run cannot be cancelled.');
+  await prisma.$transaction(async tx => {
+    await tx.paymentRun.update({ where: { id: runId }, data: { status: 'CANCELLED' } });
+    await tx.expense.updateMany({ where: { paymentRunId: runId, status: 'PAYMENT_PENDING' }, data: { paymentRunId: null, paymentStatus: 'READY', status: 'READY_TO_PAY', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null } });
+  });
+  revalidatePath('/dashboard/payments'); revalidatePath('/dashboard/expenses');
 }
 
 export async function updateBudget(teamId: string, target: number) {
@@ -206,7 +297,6 @@ export async function updateBudget(teamId: string, target: number) {
   revalidatePath('/dashboard/budgets');
 }
 
-// Admins can add and edit teams. A team may have multiple approvers; any one of them can decide a request.
 export async function createTeam(formData: FormData) {
   const user = await requireUser();
   if (!user.isAdmin) throw new Error('Only admins can add teams.');
@@ -222,7 +312,7 @@ export async function createTeam(formData: FormData) {
       await tx.teamMember.upsert({ where: { userId_teamId: { userId: approver.id, teamId: team.id } }, update: { role: 'APPROVER' }, create: { userId: approver.id, teamId: team.id, role: 'APPROVER' } });
     }
   });
-  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/submit'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/approvals');
+  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/approvals');
 }
 
 export async function updateTeam(formData: FormData) {
@@ -242,7 +332,7 @@ export async function updateTeam(formData: FormData) {
       await tx.teamMember.upsert({ where: { userId_teamId: { userId: approver.id, teamId } }, update: { role: 'APPROVER' }, create: { userId: approver.id, teamId, role: 'APPROVER' } });
     }
   });
-  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/budgets'); revalidatePath('/dashboard/submit');
+  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/budgets'); revalidatePath('/dashboard/expenses');
 }
 
 export async function deleteTeam(formData: FormData) {
@@ -250,13 +340,12 @@ export async function deleteTeam(formData: FormData) {
   const teamId = String(formData.get('teamId') || '');
   if (!user.isAdmin) throw new Error('Only admins can delete teams.');
   if (!teamId) throw new Error('Team not found.');
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async tx => {
     await tx.expense.deleteMany({ where: { teamId } });
-    await tx.fundingRequest.deleteMany({ where: { teamId } });
     await tx.teamMember.deleteMany({ where: { teamId } });
     await tx.team.delete({ where: { id: teamId } });
   });
-  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/submit'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/budgets');
+  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/budgets'); revalidatePath('/dashboard/approvals');
 }
 
 export async function upsertTeamMember(formData: FormData) {
@@ -298,47 +387,24 @@ export async function removeUser(formData: FormData) {
   const email = String(formData.get('email') || '').trim().toLowerCase();
   if (!email) throw new Error('Email is required.');
   if (email === (user.email ?? '').toLowerCase()) throw new Error('You cannot remove your own account.');
-
   const target = await prisma.user.findUnique({ where: { email } });
   if (!target) throw new Error('User not found.');
-  if (target.removedAt) return; // already removed
-
-  await prisma.$transaction(async (tx) => {
-    // Requests that were never approved carry no ongoing obligation, so they're
-    // deleted outright. Approved requests and every expense stay untouched —
-    // that's the history that must remain.
-    await tx.fundingRequest.deleteMany({ where: { userId: target.id, status: { not: 'APPROVED' } } });
-    // Free up their team roles/approver assignments and sign them out of any
-    // active sessions. We deliberately leave their Account (OAuth link)
-    // alone — with allowDangerousEmailAccountLinking on, NextAuth would
-    // relink it anyway on their next sign-in, and keeping it avoids that
-    // relink step altogether.
+  if (target.removedAt) return;
+  await prisma.$transaction(async tx => {
     await tx.teamMember.deleteMany({ where: { userId: target.id } });
     await tx.session.deleteMany({ where: { userId: target.id } });
-    if (target.email) {
-      await tx.team.updateMany({ where: { approverEmail: { equals: target.email, mode: 'insensitive' } }, data: { approverEmail: null } });
-    }
-    // Keep the User row itself (with its name/email intact) so historical
-    // Expenses and approved FundingRequests still display correctly.
-    // The removed marker is retained even if they sign in again, which keeps
-    // them hidden from the admin People list until explicitly re-added.
+    if (target.email) await tx.team.updateMany({ where: { approverEmail: { equals: target.email, mode: 'insensitive' } }, data: { approverEmail: null } });
     await tx.user.update({ where: { id: target.id }, data: { isAdmin: false, removedAt: new Date() } });
   });
-
-  revalidatePath('/dashboard/teams');
-  revalidatePath('/dashboard/approvals');
-  revalidatePath('/dashboard/expenses');
-  revalidatePath('/dashboard/my-requests');
+  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/expenses');
 }
 
 export async function sendReportNow(formData: FormData) {
   const user = await requireUser();
   if (!user.isAdmin) throw new Error('Only admins can send reports.');
-  const startValue = String(formData.get('start') || '');
-  const endValue = String(formData.get('end') || '');
+  const startValue = String(formData.get('start') || ''); const endValue = String(formData.get('end') || '');
   if (!startValue || !endValue) throw new Error('Choose a start and end date.');
-  const start = new Date(`${startValue}T00:00:00`);
-  const end = new Date(`${endValue}T23:59:59.999`);
+  const start = new Date(`${startValue}T00:00:00`); const end = new Date(`${endValue}T23:59:59.999`);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) throw new Error('Choose a valid date range.');
   const { sendCombinedReport } = await import('@/lib/report');
   await sendCombinedReport(start, new Date(end.getTime() + 1), { manual: true });

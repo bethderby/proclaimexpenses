@@ -40,18 +40,21 @@ model VerificationToken {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  isAdmin       Boolean   @default(false)
-  removedAt     DateTime?
-  accounts      Account[]
-  sessions      Session[]
-  requests      FundingRequest[]
-  expenses      Expense[]
-  memberships   TeamMember[]
+  id                String       @id @default(cuid())
+  name              String?
+  email             String?      @unique
+  emailVerified     DateTime?
+  image             String?
+  isAdmin           Boolean      @default(false)
+  removedAt         DateTime?
+  bankAccountName   String?
+  bankSortCode      String?
+  bankAccountNumber String?
+  accounts          Account[]
+  sessions          Session[]
+  expenses          Expense[]
+  paymentRunsCreated PaymentRun[]
+  memberships       TeamMember[]
 }
 
 model Team {
@@ -59,7 +62,6 @@ model Team {
   name          String   @unique
   approverEmail String?
   budgetTarget  Float    @default(0)
-  requests      FundingRequest[]
   expenses      Expense[]
   members       TeamMember[]
 }
@@ -79,40 +81,100 @@ enum TeamMemberRole {
   APPROVER
 }
 
-enum RequestStatus {
+enum PurchaseStatus {
+  ALREADY_PURCHASED
+  NOT_PURCHASED
+}
+
+enum PaymentTiming {
+  AFTER_PURCHASE
+  ADVANCE
+}
+
+enum ExpenseStatus {
   PENDING
   APPROVED
   REJECTED
   CANCELLED
+  AWAITING_PURCHASE
+  READY_TO_PAY
+  PAYMENT_PENDING
+  ADVANCE_PAID_AWAITING_RECEIPT
+  PAID
+  PAYMENT_FAILED
 }
 
-model FundingRequest {
-  id           String        @id @default(cuid())
-  date         DateTime
-  description  String
-  amount       Float
-  status       RequestStatus @default(PENDING)
-  decisionNote String?
-  decidedAt    DateTime?
-  submittedAt  DateTime      @default(now())
-  team         Team          @relation(fields: [teamId], references: [id])
-  teamId       String
-  user         User          @relation(fields: [userId], references: [id])
-  userId       String
-  expenses     Expense[]
+enum PaymentStatus {
+  NOT_READY
+  READY
+  EXPORTED
+  PAID
+  FAILED
+}
+
+enum PaymentRunStatus {
+  DRAFT
+  WISE_PREPARED
+  WISE_FUNDED
+  COMPLETED
+  CANCELLED
+}
+
+enum SettlementStatus {
+  NOT_APPLICABLE
+  AWAITING_RECEIPT
+  SETTLED
+  BALANCE_TO_RETURN
+  ADDITIONAL_REIMBURSEMENT_REQUIRED
+}
+
+model PaymentRun {
+  id          String          @id @default(cuid())
+  reference   String          @unique
+  wiseBatchGroupId String?
+  wiseStatus String?
+  status      PaymentRunStatus @default(DRAFT)
+  totalAmount Float           @default(0)
+  createdAt   DateTime        @default(now())
+  exportedAt  DateTime?
+  completedAt DateTime?
+  createdById String?
+  createdBy   User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  expenses    Expense[]
 }
 
 model Expense {
-  id           String          @id @default(cuid())
-  date         DateTime
-  description  String
-  amount       Float
-  receiptUrl   String
-  submittedAt  DateTime        @default(now())
-  team         Team            @relation(fields: [teamId], references: [id])
-  teamId       String
-  user         User             @relation(fields: [userId], references: [id])
-  userId       String
-  request      FundingRequest? @relation(fields: [requestId], references: [id])
-  requestId    String?
+  id                 String        @id @default(cuid())
+  date               DateTime
+  description        String
+  amount             Float
+  purchaseStatus     PurchaseStatus @default(ALREADY_PURCHASED)
+  paymentTiming      PaymentTiming  @default(AFTER_PURCHASE)
+  approvedAmount     Float?
+  actualAmount       Float?
+  advanceAmount      Float?
+  settlementStatus   SettlementStatus @default(NOT_APPLICABLE)
+  settlementNote     String?
+  status             ExpenseStatus @default(PENDING)
+  receiptUrl         String?
+  receiptDueAt       DateTime?
+  lastReminderAt     DateTime?
+  reminderCount      Int           @default(0)
+  decisionNote       String?
+  decidedAt          DateTime?
+  submittedAt        DateTime      @default(now())
+  purchasedAt        DateTime?
+  paymentStatus      PaymentStatus @default(NOT_READY)
+  paymentRunId       String?
+  paymentRun          PaymentRun? @relation(fields: [paymentRunId], references: [id])
+  paymentReference   String?
+  paidAt             DateTime?
+  team               Team          @relation(fields: [teamId], references: [id])
+  teamId             String
+  user               User          @relation(fields: [userId], references: [id])
+  userId             String
+  wiseRecipientId    Int?
+  wiseTransferId     Int?
+  wiseBatchGroupId   String?
+  wiseStatus         String?
 }

@@ -22,9 +22,12 @@ export const authOptions: NextAuthOptions = {
   pages: { signIn: '/login', error: '/login' },
   callbacks: {
     async signIn({ user }) {
-      // Removal is deliberately not a login ban. A removed user may still
-      // authenticate, but the removed marker is preserved so they stay hidden
-      // from the admin People list until an admin explicitly re-adds them.
+      // Removal is not a login ban. If a previously removed user signs in
+      // again, treat that successful sign-in as them rejoining Proclaim: clear
+      // the removed marker so they immediately reappear in Admin > People.
+      if (user.id) {
+        await prisma.user.update({ where: { id: user.id }, data: { removedAt: null } });
+      }
       return true;
     },
     async session({ session, user }) {

@@ -1,49 +1,71 @@
 # Proclaim Expenses
 
-A Next.js + Prisma expenses and budgeting app.
+A Next.js + Prisma expense management app for Proclaim Jesus.
 
-## What's changed
+## Unified expense workflow
 
-- Mobile-first dashboard layout with a responsive bottom navigation.
-- Refreshed visual system: cards, spacing, typography, status badges and cleaner forms.
-- Removed the category field from requests/expenses and exports.
-- Rebuilt the expense log for mobile readability.
-- Receipt uploads use Vercel Blob instead of the ephemeral Vercel filesystem, with private storage, short-lived preview URLs, image/PDF support, and authenticated receipt viewing.
-- Reports can be generated for any date range and can include all teams in one PDF.
-- The scheduled report is now one combined all-team PDF rather than one PDF per team.
-- Added an admin "Send now" report action.
-- Renamed "Teams (admin)" to "Admin Portal".
-- Admin Portal can create/delete teams, configure one approver email per team, and grant/remove database admin access. The same approver can be assigned to multiple teams; requesters do not need team membership.
+There is one workflow: **Expenses**.
 
-## Environment
+A requester answers two simple questions:
 
-Copy `.env.example` to your deployment environment. Do not commit real secrets.
+1. **Have you already bought this?**
+   - Yes — receipt required now.
+   - No — choose whether an advance is needed.
+2. **Do you need the money before you can buy it?**
+   - Yes — an advance is paid after approval.
+   - No — the requester buys it personally and is reimbursed after the receipt is uploaded.
 
-For Resend you need:
+For advances, the requester later enters the actual receipt amount. The app calculates whether money is due back to the charity or whether an additional reimbursement is required.
 
-- `RESEND_API_KEY`
-- `RESEND_FROM` set to a verified sender/domain (or `onboarding@resend.dev` for testing)
-- `REPORT_RECIPIENTS` or `ADMIN_EMAILS` containing the report recipient(s)
+## Wise payment workflow
 
-For receipts, connect a Vercel Blob store. Current Vercel Blob supports OIDC for new stores, so no long-lived Blob token is required for those stores; older stores may provide `BLOB_READ_WRITE_TOKEN`.
+The app uses the Wise Business API to prepare GBP payout batches. Wise's current API supports creating authenticated quotes, recipients, transfers and batch groups for business accounts. Wise documents the workflow as quote → recipient → transfer → funding, and batch groups can contain up to 1,000 transfers. See the official Wise documentation for current capabilities. 
 
-## Database migration
+**Important UK API limitation:** Wise currently says personal API tokens can create recipients, quotes, transfers/batches and track status, but funding API access is not available in most countries. The UK is not among the countries listed as having personal-token funding support. Therefore this version prepares and completes the Wise batch through the API, then the authorised user funds the completed batch from the charity's Wise GBP balance in Wise Business. The app then syncs Wise transfer statuses. 
 
-Run:
+This keeps the main Co-op balance separate from the payment float in Wise.
+
+## Setup
+
+1. Install dependencies with `npm install`.
+2. Set the existing application environment variables in `.env.local`.
+3. Set:
+
+```env
+WISE_API_TOKEN=your_wise_business_api_token
+WISE_PROFILE_ID=your_wise_business_profile_id
+WISE_API_BASE_URL=https://api.wise.com
+WISE_API_VERSION=2026Q3
+# Leave false for UK personal-token accounts unless Wise has enabled balance funding for your account.
+WISE_ALLOW_API_FUNDING=false
+```
+
+4. Set `BANK_DETAILS_ENCRYPTION_KEY` before users save bank details. Generate a 32-byte key as 64 hex characters:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+5. Run:
 
 ```bash
 npx prisma migrate deploy
 npx prisma generate
+npm run build
 ```
 
-The new migration adds `TeamMember` roles, adds `User.isAdmin`, makes the legacy `Team.approverEmail` optional, and removes category columns.
+## Migration
 
-## Email behaviour
+The new migration removes the example-only `FundingRequest` table/model and converts the application to the unified Expense workflow. Back up the production database before deploying.
 
-The monthly cron runs on the first day of each month and sends one combined report for the previous month. You can also choose a custom range on Export and use **Send now** as an admin.
+## Bank details
 
-Adding a Resend API key by itself does not send an email; the app must call Resend, and the `from` address must be accepted by Resend.
+Users save a UK account name, six-digit sort code and eight-digit account number. These are encrypted at rest with AES-256-GCM and only decrypted server-side when a payment is prepared.
 
-## Request routing
+## Wise API security
 
-Requests are routed solely by the selected team. Each team has an `approverEmail`; the requester does not need to be a member of that team. The same person may be the approver for multiple teams. When Resend is configured, submitting a request also sends a notification to that team approver.
+Keep the Wise API token server-side only. Never expose it in client components or `NEXT_PUBLIC_*` environment variables. Rotate the token if it is ever exposed.
+
+## Receipt reminders
+
+Vercel Cron calls `/api/cron/receipt-reminders` daily. Configure `CRON_SECRET` and Resend if email reminders are required.

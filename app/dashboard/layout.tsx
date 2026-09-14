@@ -9,9 +9,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!session?.user) redirect('/login');
   const user = session.user as any;
   const pendingCount = user.isAdmin
-    ? await prisma.fundingRequest.count({ where: { status: 'PENDING' } })
+    ? await prisma.expense.count({ where: { status: 'PENDING' } })
     : user.isApprover
-      ? await prisma.fundingRequest.count({ where: { status: 'PENDING', team: { members: { some: { userId: user.id, role: 'APPROVER' } } } } })
+      ? await prisma.expense.count({ where: { status: 'PENDING', team: { OR: [{ approverEmail: { equals: user.email, mode: 'insensitive' } }, { members: { some: { userId: user.id, role: 'APPROVER' } } }] } } })
       : 0;
 
   return (

@@ -1,68 +1,19 @@
 'use client';
-
 import { useState, useTransition } from 'react';
-import { CheckCircle2, XCircle } from 'lucide-react';
-import { decideRequest } from '@/app/actions';
+import { CheckCircle2, XCircle, ReceiptText, WalletCards } from 'lucide-react';
+import { decideExpense } from '@/app/actions';
+import StatusPill from './StatusPill';
 
-const fmt = (n: number) => `£${n.toFixed(2)}`;
-
-export default function ApprovalRow({
-  id,
-  description,
-  amount,
-  date,
-  userName,
-  teamName,
-}: {
-  id: string;
-  description: string;
-  amount: number;
-  date: string;
-  userName: string;
-  teamName: string;
-}) {
-  const [note, setNote] = useState('');
-  const [pending, startTransition] = useTransition();
-  const [pendingAction, setPendingAction] = useState<'APPROVED' | 'REJECTED' | null>(null);
-
-  function decide(status: 'APPROVED' | 'REJECTED') {
-    setPendingAction(status);
-    startTransition(async () => {
-      await decideRequest(id, status, note);
-    });
-  }
-
-  return (
-    <div className="bg-white border border-stone-200 rounded-lg p-5">
-      <div className="flex items-center justify-between gap-2">
-        <p className="font-medium text-stone-800">{description}</p>
-        <span className="font-semibold text-stone-900">{fmt(amount)}</span>
-      </div>
-      <p className="text-xs text-stone-500 mt-0.5">
-        {userName} · {teamName} · {date}
-      </p>
-      <input
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        
-        className="mt-3 w-full rounded-md border border-stone-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
-      />
-      <div className="mt-3 flex gap-2">
-        <button
-          disabled={pending}
-          onClick={() => decide('APPROVED')}
-          className="flex items-center gap-1.5 rounded-md bg-emerald-700 text-white px-3 py-1.5 text-sm font-medium transition hover:bg-emerald-800 active:scale-[.97] disabled:cursor-wait disabled:opacity-70"
-        >
-          <CheckCircle2 size={14} /> {pending && pendingAction === 'APPROVED' ? 'Approving…' : 'Approve'}
-        </button>
-        <button
-          disabled={pending}
-          onClick={() => decide('REJECTED')}
-          className="flex items-center gap-1.5 rounded-md border border-rose-300 text-rose-700 px-3 py-1.5 text-sm font-medium transition hover:bg-rose-50 active:scale-[.97] disabled:cursor-wait disabled:opacity-70"
-        >
-          <XCircle size={14} /> {pending && pendingAction === 'REJECTED' ? 'Rejecting…' : 'Reject'}
-        </button>
-      </div>
-    </div>
-  );
+const fmt=(n:number)=>`£${n.toFixed(2)}`;
+export default function ApprovalRow({ expense }: { expense: { id:string; description:string; amount:number; date:string; userName:string; teamName:string; purchaseStatus:string; paymentTiming:string; receiptUrl:string|null; status:string } }) {
+ const [note,setNote]=useState(''); const [pending,startTransition]=useTransition(); const [action,setAction]=useState<string|null>(null);
+ function decide(status:'APPROVED'|'REJECTED'){setAction(status);startTransition(async()=>{try{await decideExpense(expense.id,status,note)}finally{setAction(null)}})}
+ const mode=expense.purchaseStatus==='ALREADY_PURCHASED'?'Already purchased':expense.paymentTiming==='ADVANCE'?'Needs advance':'Will purchase later and claim reimbursement';
+ return <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="font-semibold text-stone-900">{expense.description}</p><p className="mt-1 text-xs text-stone-500">{expense.userName} · {expense.teamName} · {expense.date}</p></div><div className="flex shrink-0 items-center gap-2"><StatusPill status={expense.status}/><span className="font-bold text-stone-900">{fmt(expense.amount)}</span></div></div>
+   <div className="mt-4 flex flex-wrap gap-2"><span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600"><WalletCards size={13}/>{mode}</span>{expense.receiptUrl && <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"><ReceiptText size={13}/>Receipt attached</span>}</div>
+   {expense.receiptUrl && <a href={`/api/receipts/${expense.id}`} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs font-semibold text-emerald-700 hover:underline">View receipt</a>}
+   <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Optional note for the requester" className="mt-4 w-full rounded-xl border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600" />
+   <div className="mt-3 flex gap-2"><button disabled={pending} onClick={()=>decide('APPROVED')} className="flex items-center gap-1.5 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"><CheckCircle2 size={15}/>{action==='APPROVED'?'Approving…':'Approve'}</button><button disabled={pending} onClick={()=>decide('REJECTED')} className="flex items-center gap-1.5 rounded-xl border border-rose-300 px-4 py-2.5 text-sm font-semibold text-rose-700 disabled:opacity-60"><XCircle size={15}/>{action==='REJECTED'?'Rejecting…':'Reject'}</button></div>
+ </div>;
 }

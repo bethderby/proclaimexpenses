@@ -1,164 +1,59 @@
 'use client';
-
 import { useState } from 'react';
-import { useFormStatus } from 'react-dom';
 import { AlertCircle, Trash2, Upload } from 'lucide-react';
 import { submitExpense } from '@/app/actions';
 import DateField from './DateField';
+import SubmitExpenseButton from './SubmitExpenseButton';
 
-function LogExpenseButton({ receiptReady, busy }: { receiptReady: boolean; busy: boolean }) {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={!receiptReady || busy || pending}
-      className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-[.99] disabled:cursor-wait disabled:bg-emerald-700 disabled:opacity-100"
-    >
-      {pending ? 'Logging…' : busy ? 'Uploading…' : 'Log expense'}
-    </button>
-  );
-}
-
-
-
-export default function ExpenseForm({
-  teams,
-  approvedRequests,
-}: {
-  teams: { id: string; name: string }[];
-  approvedRequests: { id: string; description: string; amount: number }[];
-}) {
-  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
-  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
-  const [receiptType, setReceiptType] = useState<string>('');
+export default function ExpenseForm({ teams }: { teams: { id: string; name: string }[] }) {
+  const [purchaseStatus, setPurchaseStatus] = useState<'ALREADY_PURCHASED'|'NOT_PURCHASED'>('ALREADY_PURCHASED');
+  const [paymentTiming, setPaymentTiming] = useState<'AFTER_PURCHASE'|'ADVANCE'>('AFTER_PURCHASE');
+  const [receiptUrl, setReceiptUrl] = useState<string|null>(null);
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string|null>(null);
+  const [receiptType, setReceiptType] = useState('');
   const [receiptName, setReceiptName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setError('');
-    setBusy(true);
+    const file = e.target.files?.[0]; if (!file) return;
+    setError(''); setBusy(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
+      const fd = new FormData(); fd.append('file', file);
       const res = await fetch('/api/receipts/upload', { method: 'POST', body: fd });
-      const raw = await res.text();
-      let data: any = {};
-      try { data = raw ? JSON.parse(raw) : {}; } catch { throw new Error('The upload server returned an invalid response. Please try again.'); }
+      const raw = await res.text(); let data:any={}; try { data = raw ? JSON.parse(raw) : {}; } catch { throw new Error('The upload server returned an invalid response.'); }
       if (!res.ok) throw new Error(data.error || 'Upload failed.');
-      setReceiptUrl(data.url);
-      setReceiptPreviewUrl(data.previewUrl || data.url);
-      setReceiptType(data.contentType || file.type);
-      setReceiptName(file.name);
-    } catch (err: any) {
-      setError(err.message || 'Could not upload that file.');
-    } finally {
-      setBusy(false);
-    }
+      setReceiptUrl(data.url); setReceiptPreviewUrl(data.previewUrl || data.url); setReceiptType(data.contentType || file.type); setReceiptName(file.name);
+    } catch (err:any) { setError(err.message || 'Could not upload that file.'); } finally { setBusy(false); }
   }
 
-  return (
-    <form action={submitExpense} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-5 sm:p-6">
-      {error && (
-        <p className="text-sm text-rose-600 flex items-center gap-1.5">
-          <AlertCircle size={14} /> {error}
-        </p>
-      )}
-      <input type="hidden" name="receiptUrl" value={receiptUrl ?? ''} />
-      <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">Team</label>
-        <select
-          name="teamId"
-          required
-          className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
-        >
-          {teams.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
+  const alreadyBought = purchaseStatus === 'ALREADY_PURCHASED';
+  const needsAdvance = !alreadyBought && paymentTiming === 'ADVANCE';
+
+  return <form action={submitExpense} className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    {error && <p className="flex items-center gap-1.5 text-sm text-rose-600"><AlertCircle size={14}/>{error}</p>}
+    <input type="hidden" name="receiptUrl" value={receiptUrl ?? ''}/>
+    <input type="hidden" name="purchaseStatus" value={purchaseStatus}/>
+    <input type="hidden" name="paymentTiming" value={alreadyBought ? 'AFTER_PURCHASE' : paymentTiming}/>
+
+    <div><label className="block text-sm font-medium text-stone-700 mb-1">Team</label><select name="teamId" required className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600">{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+    <div><label className="block text-sm font-medium text-stone-700 mb-1">What's this expense for?</label><input name="description" required className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600" placeholder="e.g. Train tickets for conference"/></div>
+    <div><label className="block text-sm font-medium text-stone-700 mb-1">Amount</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">£</span><input type="number" step="0.01" min="0.01" name="amount" required className="h-10 w-full rounded-xl border border-stone-300 pl-7 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"/></div></div>
+
+    <div>
+      <p className="mb-2 block text-sm font-medium text-stone-700">Have you already bought this?</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <button type="button" onClick={()=>setPurchaseStatus('ALREADY_PURCHASED')} className={`rounded-xl border p-3 text-left ${alreadyBought?'border-emerald-600 bg-emerald-50 ring-1 ring-emerald-600':'border-slate-200 hover:bg-slate-50'}`}><p className="text-sm font-semibold text-slate-900">Yes, I've already bought it</p><p className="mt-0.5 text-xs text-slate-500">Receipt required now.</p></button>
+        <button type="button" onClick={()=>setPurchaseStatus('NOT_PURCHASED')} className={`rounded-xl border p-3 text-left ${!alreadyBought?'border-emerald-600 bg-emerald-50 ring-1 ring-emerald-600':'border-slate-200 hover:bg-slate-50'}`}><p className="text-sm font-semibold text-slate-900">No, I haven't bought it</p><p className="mt-0.5 text-xs text-slate-500">Choose how you'd like to pay below.</p></button>
       </div>
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1.5">Date</label>
-        <DateField name="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">What did you buy?</label>
-        <input
-          name="description"
-          required
-          className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
-          
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">Amount</label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-sm">£</span>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            name="amount"
-            required
-            className="w-full rounded-md border border-stone-300 h-10 pl-7 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
-            
-          />
-        </div>
-      </div>
-      {approvedRequests.length > 0 && (
-        <div>
-          <label className="block text-sm font-medium text-stone-700 mb-1">Linked request (optional)</label>
-          <select
-            name="requestId"
-            defaultValue=""
-            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
-          >
-            <option value="">Not linked to a request</option>
-            {approvedRequests.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.description} (£{r.amount.toFixed(2)})
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-      <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">Receipt</label>
-        {!receiptUrl ? (
-          <label className="flex items-center justify-center gap-2 rounded-md border-2 border-dashed border-stone-300 py-6 text-sm text-stone-500 cursor-pointer hover:border-emerald-600 hover:text-emerald-700">
-            <Upload size={16} /> {busy ? 'Uploading…' : 'Upload receipt (image or PDF)'}
-            <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFile} disabled={busy} />
-          </label>
-        ) : (
-          <div className="flex items-center gap-3 rounded-md border border-stone-200 p-3">
-            {receiptType === 'application/pdf' ? (
-              <div className="grid h-16 w-16 shrink-0 place-items-center rounded bg-slate-100 text-xs font-bold text-slate-600">PDF</div>
-            ) : (
-              <img src={receiptPreviewUrl || receiptUrl} alt="Receipt preview" className="h-16 w-16 object-cover rounded" />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-stone-700 truncate">{receiptName}</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setReceiptUrl(null);
-                  setReceiptPreviewUrl(null);
-                  setReceiptType('');
-                  setReceiptName('');
-                }}
-                className="text-xs text-rose-600 flex items-center gap-1 mt-1 transition active:scale-[.96]"
-              >
-                <Trash2 size={12} /> Remove
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-      <LogExpenseButton receiptReady={!!receiptUrl} busy={busy} />
-    </form>
-  );
+    </div>
+
+    {!alreadyBought && <div><p className="mb-2 block text-sm font-medium text-stone-700">Do you need the money before you can buy it?</p><div className="grid gap-2 sm:grid-cols-2"><button type="button" onClick={()=>setPaymentTiming('ADVANCE')} className={`rounded-xl border p-3 text-left ${needsAdvance?'border-emerald-600 bg-emerald-50 ring-1 ring-emerald-600':'border-slate-200 hover:bg-slate-50'}`}><p className="text-sm font-semibold text-slate-900">Yes, I need an advance</p><p className="mt-0.5 text-xs text-slate-500">We'll pay you first, then reconcile the receipt.</p></button><button type="button" onClick={()=>setPaymentTiming('AFTER_PURCHASE')} className={`rounded-xl border p-3 text-left ${!needsAdvance?'border-emerald-600 bg-emerald-50 ring-1 ring-emerald-600':'border-slate-200 hover:bg-slate-50'}`}><p className="text-sm font-semibold text-slate-900">No, I can pay for it myself</p><p className="mt-0.5 text-xs text-slate-500">Buy it later, then claim reimbursement.</p></button></div></div>}
+
+    <div><label className="mb-1.5 block text-sm font-medium text-slate-700">{alreadyBought?'Purchase date':'Expected purchase date'}</label><DateField name="date" defaultValue={new Date().toISOString().slice(0,10)} required/></div>
+
+    <div><label className="mb-1 block text-sm font-medium text-stone-700">Receipt {alreadyBought?<span className="text-rose-600">(required)</span>:<span className="text-slate-400">(optional for now)</span>}</label>{!receiptUrl?<label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border-2 border-dashed border-stone-300 py-6 text-sm text-stone-500 hover:border-emerald-600 hover:text-emerald-700"><Upload size={16}/>{busy?'Uploading…':'Upload receipt (image or PDF)'}<input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFile} disabled={busy}/></label>:<div className="flex items-center gap-3 rounded-md border border-stone-200 p-3">{receiptType==='application/pdf'?<div className="grid h-16 w-16 shrink-0 place-items-center rounded bg-slate-100 text-xs font-bold text-slate-600">PDF</div>:<img src={receiptPreviewUrl||receiptUrl} alt="Receipt preview" className="h-16 w-16 rounded object-cover"/>}<div className="min-w-0 flex-1"><p className="truncate text-sm text-stone-700">{receiptName}</p><button type="button" onClick={()=>{setReceiptUrl(null);setReceiptPreviewUrl(null);setReceiptType('');setReceiptName('')}} className="mt-1 flex items-center gap-1 text-xs text-rose-600"><Trash2 size={12}/> Remove</button></div></div>}{!alreadyBought&&<p className="mt-2 text-xs text-slate-500">You'll be reminded to upload proof after purchase.</p>}</div>
+
+    <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{alreadyBought?'The receipt is required because you have already spent the money.':needsAdvance?'If approved, the charity will pay you an advance through Wise. After purchase, upload the receipt and actual amount; the app will calculate any balance to return or extra reimbursement.':'If approved, you can buy the item yourself. Upload the receipt after purchase and it will become ready for reimbursement.'}</div>
+    <SubmitExpenseButton busy={busy}/>
+  </form>;
 }
