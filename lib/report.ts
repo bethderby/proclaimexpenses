@@ -7,12 +7,13 @@ export async function sendCombinedReport(start: Date, end: Date, opts: { manual?
     include: { user: true, team: true },
     orderBy: { date: 'asc' },
   });
-  const items = expenses.map((e) => ({ date: e.date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }), teamName: e.team.name, userName: e.user.name ?? e.user.email ?? '', description: e.description, amount: e.amount }));
+  const items = expenses.map((e) => ({ date: e.date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }), teamName: e.team.name, userName: e.user.name ?? e.user.email ?? '', description: e.settlementNote ? `${e.description} (${e.settlementNote})` : e.description, amount: e.amount }));
   const label = `${start.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })} – ${new Date(end.getTime()-1).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}`;
   const pdf = await buildStatementPdf('All teams', label, items);
   if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured.');
-  const recipients = (process.env.REPORT_RECIPIENTS || process.env.ADMIN_EMAILS || '').split(',').map((e) => e.trim()).filter(Boolean);
-  if (!recipients.length) throw new Error('Set REPORT_RECIPIENTS or ADMIN_EMAILS to the email address that should receive reports.');
+  const admins = await prisma.user.findMany({ where: { isAdmin: true, removedAt: null, email: { not: null } }, select: { email: true } });
+  const recipients = admins.map((a) => a.email!).filter(Boolean);
+  if (!recipients.length) throw new Error('No active admin has an email address on file to send this report to.');
   const { Resend } = await import('resend');
   const resend = new Resend(process.env.RESEND_API_KEY);
   const from = process.env.RESEND_FROM;

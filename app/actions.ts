@@ -440,7 +440,11 @@ export async function removeUser(formData: FormData) {
     await tx.teamMember.deleteMany({ where: { userId: target.id } });
     await tx.session.deleteMany({ where: { userId: target.id } });
     if (target.email) await tx.team.updateMany({ where: { approverEmail: { equals: target.email, mode: 'insensitive' } }, data: { approverEmail: null } });
-    await tx.user.update({ where: { id: target.id }, data: { isAdmin: false, removedAt: new Date() } });
+    // Reset their account, not their history: clear stored payout bank
+    // details (no reason to keep live bank credentials for someone no
+    // longer active) but leave every Expense/PaymentRun row untouched -
+    // those stay linked to this User row for accounting.
+    await tx.user.update({ where: { id: target.id }, data: { isAdmin: false, removedAt: new Date(), bankAccountName: null, bankSortCode: null, bankAccountNumber: null } });
   });
   revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/expenses');
 }
