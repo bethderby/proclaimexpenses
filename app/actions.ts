@@ -167,20 +167,66 @@ export async function markExpensePurchased(formData: FormData) {
   if (!expenseId || !date || Number.isNaN(new Date(date).getTime())) throw new Error('Choose a valid purchase date.');
   if (!receiptUrl) throw new Error('Upload the receipt before confirming the purchase.');
   if (!actualAmount || actualAmount <= 0) throw new Error('Enter the actual amount shown on the receipt.');
-  const expense = await prisma.expense.findUnique({ where: { id: expenseId } });
+  const expense = await prisma.expense.findUnique({ where: { id: expenseId }, include: { team: true } });
   if (!expense || expense.userId !== user.id) throw new Error('Expense not found.');
   if (expense.status !== 'AWAITING_PURCHASE' && expense.status !== 'ADVANCE_PAID_AWAITING_RECEIPT') throw new Error('This expense is not waiting for a purchase or receipt.');
 
   if (expense.status === 'ADVANCE_PAID_AWAITING_RECEIPT') {
     const advance = expense.advanceAmount ?? expense.amount;
     const difference = Number((advance - actualAmount).toFixed(2));
-    let status: 'PAID' | 'BALANCE_TO_RETURN' | 'ADDITIONAL_REIMBURSEMENT_REQUIRED';
     let settlementStatus: 'SETTLED' | 'BALANCE_TO_RETURN' | 'ADDITIONAL_REIMBURSEMENT_REQUIRED';
     let settlementNote: string | null = null;
-    if (difference === 0) { status = 'PAID'; settlementStatus = 'SETTLED'; }
-    else if (difference > 0) { status = 'PAID'; settlementStatus = 'BALANCE_TO_RETURN'; settlementNote = `£${difference.toFixed(2)} of the advance is due back to the charity.`; }
-    else { status = 'PAID'; settlementStatus = 'ADDITIONAL_REIMBURSEMENT_REQUIRED'; settlementNote = `£${Math.abs(difference).toFixed(2)} additional reimbursement is due to the requester.`; }
-    await prisma.expense.update({ where: { id: expenseId }, data: { purchasedAt: new Date(date), receiptUrl, actualAmount, receiptDueAt: null, lastReminderAt: null, status, settlementStatus, settlementNote } });
+    if (difference === 0) {
+      settlementStatus = 'SETTLED';
+    } else if (difference > 0) {
+      settlementStatus = 'BALANCE_TO_RETURN';
+      settlementNote = `You were advanced £${advance.toFixed(2)} but the receipt shows £${actualAmount.toFixed(2)}. Please arrange to return the £${difference.toFixed(2)} balance to Proclaim - speak to your approver about how to do this.`;
+    } else {
+      settlementStatus = 'ADDITIONAL_REIMBURSEMENT_REQUIRED';
+      settlementNote = `You were advanced £${advance.toFixed(2)} but the receipt shows £${actualAmount.toFixed(2)}. The extra £${Math.abs(difference).toFixed(2)} has been queued as a separate reimbursement and will be paid out via Wise once an approver runs the next payment batch.`;
+    }
+
+    await prisma.expense.update({
+      where: { id: expenseId },
+      data: { purchasedAt: new Date(date), receiptUrl, actualAmount, receiptDueAt: null, lastReminderAt: null, status: 'PAID', settlementStatus, settlementNote },
+    });
+
+    // The additional amount owed to the requester can't just be added back
+    // onto the original expense - that one's already marked PAID and has
+    // already been through a Wise batch. Instead it becomes its own small
+    // expense, already "approved" (it's a top-up of something already
+    // approved) and immediately ready for the next Wise payment run.
+    if (settlementStatus === 'ADDITIONAL_REIMBURSEMENT_REQUIRED') {
+      await prisma.expense.create({
+        data: {
+          teamId: expense.teamId,
+          userId: expense.userId,
+          description: `Additional reimbursement - ${expense.description}`,
+          amount: Math.abs(difference),
+          approvedAmount: Math.abs(difference),
+          purchaseStatus: 'ALREADY_PURCHASED',
+          paymentTiming: 'AFTER_PURCHASE',
+          date: new Date(date),
+          receiptUrl,
+          purchasedAt: new Date(date),
+          actualAmount: Math.abs(difference),
+          status: 'READY_TO_PAY',
+          paymentStatus: 'READY',
+          settlementStatus: 'NOT_APPLICABLE',
+          decisionNote: `Auto-created: balance owed after reconciling advance on "${expense.description}".`,
+          decidedAt: new Date(),
+        },
+      });
+    }
+
+    if (user.email && settlementNote) {
+      await notify(
+        user.email,
+        settlementStatus === 'BALANCE_TO_RETURN' ? 'Balance owed back to Proclaim' : 'Extra reimbursement due to you',
+        `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a"><h2 style="margin-bottom:8px">${escapeHtml(expense.description)}</h2><p style="color:#475569">${escapeHtml(settlementNote)}</p></div>`,
+        settlementNote,
+      );
+    }
   } else {
     await prisma.expense.update({ where: { id: expenseId }, data: { purchasedAt: new Date(date), receiptUrl, actualAmount, receiptDueAt: null, lastReminderAt: null, status: 'READY_TO_PAY', paymentStatus: 'READY', settlementStatus: 'NOT_APPLICABLE' } });
   }
@@ -204,8 +250,8 @@ export async function createWisePaymentRun() {
   if (!user.isAdmin && !user.isApprover) throw new Error('Only approvers or admins can create payment runs.');
   if (!isWiseConfigured()) throw new Error('Wise is not configured. Add WISE_API_TOKEN and WISE_PROFILE_ID first.');
   const where: any = user.isAdmin
-    ? { status: 'READY_TO_PAY' }
-    : { status: 'READY_TO_PAY', team: { OR: [{ approverEmail: { equals: user.email, mode: 'insensitive' } }, { members: { some: { userId: user.id, role: 'APPROVER' } } }] } };
+    ? { paymentStatus: 'READY' }
+    : { paymentStatus: 'READY', team: { OR: [{ approverEmail: { equals: user.email, mode: 'insensitive' } }, { members: { some: { userId: user.id, role: 'APPROVER' } } }] } };
   const expenses = await prisma.expense.findMany({ where, include: { user: true }, orderBy: { submittedAt: 'asc' } });
   const eligible = expenses.filter(e => e.user.bankAccountName && e.user.bankSortCode && e.user.bankAccountNumber);
   if (!eligible.length) throw new Error('No ready expenses with complete bank details are available for your teams.');

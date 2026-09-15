@@ -8,7 +8,7 @@ import { decryptBankDetail } from '@/lib/bank';
 const money=(n:number)=>`£${n.toFixed(2)}`;
 export default async function PaymentsPage(){
  const session=await getServerSession(authOptions); if(!session?.user) redirect('/login'); const user=session.user as any; if(!user.isAdmin&&!user.isApprover) redirect('/dashboard');
- const readyWhere:any=user.isAdmin?{status:'READY_TO_PAY'}:{status:'READY_TO_PAY',team:{OR:[{approverEmail:{equals:user.email,mode:'insensitive'}},{members:{some:{userId:user.id,role:'APPROVER'}}}]}};
+ const readyWhere:any=user.isAdmin?{paymentStatus:'READY'}:{paymentStatus:'READY',team:{OR:[{approverEmail:{equals:user.email,mode:'insensitive'}},{members:{some:{userId:user.id,role:'APPROVER'}}}]}};
  const [ready,runs]=await Promise.all([prisma.expense.findMany({where:readyWhere,include:{user:true,team:true},orderBy:{submittedAt:'asc'}}),prisma.paymentRun.findMany({where:user.isAdmin?{}:{createdById:user.id},include:{expenses:{include:{user:true,team:true}}},orderBy:{createdAt:'desc'},take:20})]);
  const payable=ready.filter(e=>e.user.bankAccountName&&e.user.bankSortCode&&e.user.bankAccountNumber); const missing=ready.filter(e=>!e.user.bankAccountName||!e.user.bankSortCode||!e.user.bankAccountNumber);
  return <div className="space-y-7"><div><p className="text-sm font-semibold text-emerald-600">Payments</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">Wise payment runs.</h1><p className="mt-2 max-w-3xl text-sm text-slate-500">Approved reimbursements and advances are prepared in Wise. The app creates the Wise batch and tracks it; for UK accounts using a personal Wise API token, funding the batch still needs to be completed in Wise Business.</p></div>
