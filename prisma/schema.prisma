@@ -173,8 +173,8 @@ model Expense {
   teamId             String
   user               User          @relation(fields: [userId], references: [id])
   userId             String
-  wiseRecipientId    Int?
-  wiseTransferId     Int?
+  wiseRecipientId    String?
+  wiseTransferId     String?
   wiseBatchGroupId   String?
   wiseStatus         String?
 }

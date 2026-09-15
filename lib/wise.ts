@@ -159,10 +159,10 @@ export async function getWiseBatchGroup(batchGroupId: string) {
   return wiseFetch(`/profiles/${profileId}/batch-groups/${batchGroupId}`, { method: 'GET' });
 }
 
-export async function getWiseTransfer(transferId: number) {
+export async function getWiseTransfer(transferId: string | number) {
   return wiseFetch(`/transfers/${transferId}`, { method: 'GET' });
 }
 
-export async function cancelWiseTransfer(transferId: number) {
+export async function cancelWiseTransfer(transferId: string | number) {
   return wiseFetch(`/transfers/${transferId}/cancel`, { method: 'PUT' });
 }

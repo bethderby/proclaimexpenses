@@ -321,12 +321,14 @@ export async function createWisePaymentRun() {
           sortCode: decryptBankDetail(expense.user.bankSortCode!),
           accountNumber: decryptBankDetail(expense.user.bankAccountNumber!),
         });
-        recipientId = Number(recipient.id);
+        recipientId = String(recipient.id);
       }
 
       await prisma.expense.update({ where: { id: expense.id }, data: { wiseRecipientId: recipientId, wiseStatus: 'recipient_created' } });
 
-      const quote = await createWiseQuote(recipientId, expense.amount);
+      const recipientIdNumber = Number(recipientId);
+      if (!Number.isSafeInteger(recipientIdNumber)) throw new Error(`Invalid Wise recipient ID for expense ${expense.id}.`);
+      const quote = await createWiseQuote(recipientIdNumber, expense.amount);
       const quoteUuid = quote.id || quote.uuid;
       if (!quoteUuid) throw new Error(`Wise did not return a quote ID for expense ${expense.id}.`);
 
@@ -334,18 +336,18 @@ export async function createWisePaymentRun() {
       // Wise requires transfer requirements to be checked before transfer creation.
       // We pass the same details we will use for the actual transfer so Wise can
       // validate corridor-specific requirements against the real payload.
-      await getWiseTransferRequirements({ targetAccount: recipientId, quoteUuid: String(quoteUuid), details });
+      await getWiseTransferRequirements({ targetAccount: recipientIdNumber, quoteUuid: String(quoteUuid), details });
 
       const customerTransactionId = deterministicWiseTransactionId(expense.id);
       const transfer = await addWiseBatchTransfer(batchId, {
-        targetAccount: recipientId,
+        targetAccount: recipientIdNumber,
         quoteUuid: String(quoteUuid),
         details,
         customerTransactionId,
       });
-      const transferId = Number(transfer.id);
-      if (!Number.isFinite(transferId)) throw new Error(`Wise did not return a transfer ID for expense ${expense.id}.`);
-      createdTransfers.push(transferId);
+      const transferId = String(transfer.id);
+      if (!/^\d+$/.test(transferId)) throw new Error(`Wise did not return a transfer ID for expense ${expense.id}.`);
+      createdTransfers.push(Number(transferId));
 
       // Persist each external ID immediately so a failed later transfer can be
       // reconciled/cancelled without losing track of the earlier ones.
@@ -437,7 +439,7 @@ export async function syncWisePaymentRun(formData: FormData) {
   await prisma.$transaction(async tx => {
     await tx.paymentRun.update({ where: { id: runId }, data: { wiseStatus: batch.status || 'COMPLETED', status: allSuccessful ? 'COMPLETED' : allComplete ? 'WISE_PREPARED' : 'WISE_PREPARED', ...(allSuccessful ? { completedAt: new Date() } : {}) } });
     for (const t of transfers) {
-      const expense = run.expenses.find(e => e.wiseTransferId === Number(t.id));
+      const expense = run.expenses.find(e => e.wiseTransferId === String(t.id));
       if (!expense) continue;
       const state = String(t.status || 'unknown');
       if (['outgoing_payment_sent'].includes(state)) {
