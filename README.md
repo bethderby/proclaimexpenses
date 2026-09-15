@@ -37,7 +37,6 @@ WISE_PROFILE_ID=your_wise_business_profile_id
 WISE_API_BASE_URL=https://api.wise.com
 WISE_API_VERSION=2026Q3
 # Leave false for UK personal-token accounts unless Wise has enabled balance funding for your account.
-WISE_ALLOW_API_FUNDING=false
 ```
 
 4. Set `BANK_DETAILS_ENCRYPTION_KEY` before users save bank details. Generate a 32-byte key as 64 hex characters:

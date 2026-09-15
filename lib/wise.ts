@@ -16,6 +16,7 @@ async function wiseFetch(path: string, init: RequestInit = {}) {
   headers.set('Authorization', `Bearer ${token}`);
   headers.set('Content-Type', 'application/json');
   headers.set('X-External-Correlation-Id', crypto.randomUUID());
+  headers.set('Accept-Minor-Version', '1');
   const response = await fetch(`${API_BASE}/${API_VERSION}${path}`, { ...init, headers, cache: 'no-store' });
   const text = await response.text();
   let body: any = {};
@@ -29,6 +30,21 @@ async function wiseFetch(path: string, init: RequestInit = {}) {
 
 export function isWiseConfigured() {
   return Boolean(process.env.WISE_API_TOKEN && process.env.WISE_PROFILE_ID);
+}
+
+/**
+ * UK GBP bank-transfer references are limited to 18 characters. Keep these
+ * references deliberately conservative: alphanumeric only, which also avoids
+ * corridor-specific punctuation problems.
+ */
+export function validateWiseReference(reference: string) {
+  if (!reference || reference.length > 18) {
+    throw new Error(`Wise payment reference must be 18 characters or fewer (got ${reference.length}).`);
+  }
+  if (!/^[A-Za-z0-9]+$/.test(reference)) {
+    throw new Error('Wise payment reference must contain letters and numbers only.');
+  }
+  return reference;
 }
 
 export async function createWiseRecipient(input: { name: string; sortCode: string; accountNumber: string }) {
@@ -59,14 +75,43 @@ export async function createWiseQuote(targetAccount: number, amount: number) {
   });
 }
 
-export async function createWiseTransfer(input: { targetAccount: number; quoteUuid: string; reference: string }) {
+export type WiseTransferDetails = {
+  reference: string;
+  transferPurpose?: string;
+  sourceOfFunds?: string;
+};
+
+export function getWiseTransferDetails(reference: string): WiseTransferDetails {
+  validateWiseReference(reference);
+  return {
+    reference,
+    // These can be overridden with the exact Wise enum required by your profile.
+    transferPurpose: process.env.WISE_TRANSFER_PURPOSE || 'verification.transfers.purpose.pay.bills',
+    sourceOfFunds: process.env.WISE_SOURCE_OF_FUNDS || 'verification.source.of.funds.other',
+  };
+}
+
+export async function getWiseTransferRequirements(input: { targetAccount: number; quoteUuid: string; details: WiseTransferDetails }) {
+  const details = getWiseTransferDetails(input.details.reference);
+  return wiseFetch('/transfer-requirements', {
+    method: 'POST',
+    body: JSON.stringify({
+      targetAccount: input.targetAccount,
+      quoteUuid: input.quoteUuid,
+      details,
+    }),
+  });
+}
+
+export async function createWiseTransfer(input: { targetAccount: number; quoteUuid: string; details: WiseTransferDetails; customerTransactionId?: string }) {
+  const details = getWiseTransferDetails(input.details.reference);
   return wiseFetch('/transfers', {
     method: 'POST',
     body: JSON.stringify({
       targetAccount: input.targetAccount,
       quoteUuid: input.quoteUuid,
-      customerTransactionId: crypto.randomUUID(),
-      details: { reference: input.reference },
+      customerTransactionId: input.customerTransactionId || crypto.randomUUID(),
+      details,
     }),
   });
 }
@@ -79,24 +124,33 @@ export async function createWiseBatchGroup(name: string) {
   });
 }
 
-export async function addWiseBatchTransfer(batchGroupId: string, input: { targetAccount: number; quoteUuid: string; reference: string }) {
+export async function addWiseBatchTransfer(batchGroupId: string, input: { targetAccount: number; quoteUuid: string; details: WiseTransferDetails; customerTransactionId?: string }) {
   const { profileId } = requireWiseConfig();
+  const details = getWiseTransferDetails(input.details.reference);
   return wiseFetch(`/profiles/${profileId}/batch-groups/${batchGroupId}/transfers`, {
     method: 'POST',
     body: JSON.stringify({
       targetAccount: input.targetAccount,
       quoteUuid: input.quoteUuid,
-      customerTransactionId: crypto.randomUUID(),
-      details: { reference: input.reference },
+      customerTransactionId: input.customerTransactionId || crypto.randomUUID(),
+      details,
     }),
   });
 }
 
-export async function completeWiseBatchGroup(batchGroupId: string, version?: number) {
+export async function completeWiseBatchGroup(batchGroupId: string, version: number) {
   const { profileId } = requireWiseConfig();
   return wiseFetch(`/profiles/${profileId}/batch-groups/${batchGroupId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ status: 'COMPLETED', ...(version ? { version } : {}) }),
+    body: JSON.stringify({ status: 'COMPLETED', version }),
+  });
+}
+
+export async function cancelWiseBatchGroup(batchGroupId: string, version: number) {
+  const { profileId } = requireWiseConfig();
+  return wiseFetch(`/profiles/${profileId}/batch-groups/${batchGroupId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'CANCELLED', version }),
   });
 }
 
@@ -109,18 +163,6 @@ export async function getWiseTransfer(transferId: number) {
   return wiseFetch(`/transfers/${transferId}`, { method: 'GET' });
 }
 
-/**
- * Wise documents API funding from balance, but notes that funding via personal API tokens
- * is not available in most countries, including the UK. Keep this behind an explicit flag
- * so the app never silently attempts a payment your account is not allowed to fund.
- */
-export async function fundWiseBatchFromBalance(batchGroupId: string) {
-  if (process.env.WISE_ALLOW_API_FUNDING !== 'true') {
-    throw new Error('Wise batch has been prepared, but API funding is disabled. Open Wise Business and fund the completed batch from your GBP balance.');
-  }
-  const { profileId } = requireWiseConfig();
-  return wiseFetch(`/profiles/${profileId}/batch-payments/${batchGroupId}/payments`, {
-    method: 'POST',
-    body: JSON.stringify({ type: 'BALANCE' }),
-  });
+export async function cancelWiseTransfer(transferId: number) {
+  return wiseFetch(`/transfers/${transferId}/cancel`, { method: 'PUT' });
 }

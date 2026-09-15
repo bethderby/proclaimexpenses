@@ -26,7 +26,6 @@ WISE_API_TOKEN=...
 WISE_PROFILE_ID=...
 WISE_API_BASE_URL=https://api.wise.com
 WISE_API_VERSION=2026Q3
-WISE_ALLOW_API_FUNDING=false
 ```
 
 Wise's current documentation says personal API tokens can create recipients, quotes, transfers/batches and track transfers, but API funding is restricted by country. For a UK business account, keep `WISE_ALLOW_API_FUNDING=false` unless Wise explicitly confirms funding-by-API is enabled for the account.

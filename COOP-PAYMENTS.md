@@ -40,6 +40,6 @@ Therefore the app:
 6. asks the authorised user to fund the completed batch in Wise Business;
 7. lets the user sync the resulting Wise statuses.
 
-If Wise enables balance-funding API access for this account later, set `WISE_ALLOW_API_FUNDING=true` only after confirming that capability with Wise.
+Wise personal API tokens can prepare batches but, for UK accounts, funding is not available through the personal-token API flow. The completed batch must be funded in Wise Business unless Wise has explicitly enabled a different funding capability for your account.
 
 The Wise API token must remain server-side.
