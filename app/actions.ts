@@ -269,6 +269,10 @@ export async function createWisePaymentRun() {
           accountNumber: decryptBankDetail(expense.user.bankAccountNumber!),
         });
         recipientId = Number(recipient.id);
+        // Persist immediately, not just at the end of the loop - if a later
+        // expense in this same batch throws, a retry should reuse this
+        // recipient instead of creating a duplicate one in Wise.
+        await prisma.expense.update({ where: { id: expense.id }, data: { wiseRecipientId: recipientId } });
       }
       const quote = await createWiseQuote(recipientId, expense.amount);
       const transfer = await addWiseBatchTransfer(String(batch.id), { targetAccount: recipientId, quoteUuid: quote.id || quote.uuid, reference });
@@ -328,7 +332,11 @@ export async function cancelPaymentRun(formData: FormData) {
   if (run.status === 'COMPLETED') throw new Error('A completed payment run cannot be cancelled.');
   await prisma.$transaction(async tx => {
     await tx.paymentRun.update({ where: { id: runId }, data: { status: 'CANCELLED' } });
-    await tx.expense.updateMany({ where: { paymentRunId: runId, status: 'PAYMENT_PENDING' }, data: { paymentRunId: null, paymentStatus: 'READY', status: 'READY_TO_PAY', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null } });
+    // Restore each expense to the status it actually represents: an advance
+    // that hasn't been purchased yet goes back to AWAITING_PURCHASE, not
+    // READY_TO_PAY (which implies it's already been bought).
+    await tx.expense.updateMany({ where: { paymentRunId: runId, status: 'PAYMENT_PENDING', purchaseStatus: 'NOT_PURCHASED' }, data: { paymentRunId: null, paymentStatus: 'READY', status: 'AWAITING_PURCHASE', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null } });
+    await tx.expense.updateMany({ where: { paymentRunId: runId, status: 'PAYMENT_PENDING', purchaseStatus: 'ALREADY_PURCHASED' }, data: { paymentRunId: null, paymentStatus: 'READY', status: 'READY_TO_PAY', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null } });
   });
   revalidatePath('/dashboard/payments'); revalidatePath('/dashboard/expenses');
 }
