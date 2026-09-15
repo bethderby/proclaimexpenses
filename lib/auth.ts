@@ -25,8 +25,18 @@ export const authOptions: NextAuthOptions = {
       // Removal is not a login ban. If a previously removed user signs in
       // again, treat that successful sign-in as them rejoining Proclaim: clear
       // the removed marker so they immediately reappear in Admin > People.
-      if (user.id) {
-        await prisma.user.update({ where: { id: user.id }, data: { removedAt: null } });
+      //
+      // This must never be allowed to crash the sign-in itself - if this
+      // bookkeeping update fails for any reason, the person should still be
+      // able to log in; we just log the real error so it's visible in
+      // Vercel's function logs instead of only showing as a generic 500 on
+      // /api/auth/error with no detail.
+      if (user?.id) {
+        try {
+          await prisma.user.update({ where: { id: user.id }, data: { removedAt: null } });
+        } catch (error) {
+          console.error('signIn callback: failed to clear removedAt for', user.id, error);
+        }
       }
       return true;
     },
