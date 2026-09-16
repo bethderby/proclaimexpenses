@@ -18,8 +18,7 @@ export default function Sidebar({ name, email, isApprover, isAdmin, pendingCount
     
     { href: '/dashboard/expenses', label: 'Expenses', icon: Receipt },
     ...(isApprover ? [{ href: '/dashboard/approvals', label: 'Approvals', icon: Inbox, badge: pendingCount }, { href: '/dashboard/payments', label: 'Payments', icon: CreditCard }] : []),
-    { href: '/dashboard/budgets', label: 'Reports', icon: BarChart3 },
-    ...(isAdmin ? [{ href: '/dashboard/teams', label: 'Admin Portal', icon: Users }] : []),
+    ...(isAdmin ? [{ href: '/dashboard/reports', label: 'Reports', icon: BarChart3 }, { href: '/dashboard/teams', label: 'Admin Portal', icon: Users }] : []),
   ];
   return (
     <>

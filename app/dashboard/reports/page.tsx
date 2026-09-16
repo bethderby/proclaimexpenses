@@ -7,7 +7,7 @@ import ExportControls from '@/components/ExportControls';
 
 function monthLabel(mk:string){const[y,m]=mk.split('-');return new Date(Number(y),Number(m)-1,1).toLocaleDateString('en-US',{month:'short',year:'numeric'});}
 export default async function ReportsPage(){
- const session=await getServerSession(authOptions); if(!session?.user)redirect('/login'); const user=session.user as any;
+ const session=await getServerSession(authOptions); if(!session?.user)redirect('/login'); const user=session.user as any; if(!user.isAdmin)redirect('/dashboard');
  const [teams,expenses]=await Promise.all([prisma.team.findMany({orderBy:{name:'asc'}}),prisma.expense.findMany({include:{team:true},orderBy:{date:'asc'}})]);
  const spendByTeam:Record<string,number>={}; teams.forEach(t=>spendByTeam[t.id]=0); expenses.forEach(e=>spendByTeam[e.teamId]=(spendByTeam[e.teamId]||0)+e.amount);
  const barData=teams.map(t=>({name:t.name,Spent:Math.round(spendByTeam[t.id]||0)}));

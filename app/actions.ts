@@ -609,7 +609,7 @@ export async function updateBudget(teamId: string, target: number) {
   const allowed = user.isAdmin || team.approverEmails.some(e => e.toLowerCase() === (user.email ?? '').toLowerCase());
   if (!allowed) throw new Error("Only this team's configured approver or an admin can change its budget.");
   await prisma.team.update({ where: { id: teamId }, data: { budgetTarget: target } });
-  revalidatePath('/dashboard/budgets');
+  revalidatePath('/dashboard/reports');
 }
 
 export async function createTeam(formData: FormData) {
@@ -634,7 +634,7 @@ export async function updateTeam(formData: FormData) {
   if (!teamId || !name) throw new Error('A team name is required.');
   if (!approverEmails.length || approverEmails.some(e => !e.includes('@'))) throw new Error('Add at least one valid approver email.');
   await prisma.team.update({ where: { id: teamId }, data: { name, approverEmails, budgetTarget } });
-  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/budgets'); revalidatePath('/dashboard/expenses');
+  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/reports'); revalidatePath('/dashboard/expenses');
 }
 
 export async function deleteTeam(formData: FormData) {
@@ -646,7 +646,7 @@ export async function deleteTeam(formData: FormData) {
     await tx.expense.deleteMany({ where: { teamId } });
     await tx.team.delete({ where: { id: teamId } });
   });
-  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/budgets'); revalidatePath('/dashboard/approvals');
+  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/reports'); revalidatePath('/dashboard/approvals');
 }
 
 export async function setAdminStatus(formData: FormData) {

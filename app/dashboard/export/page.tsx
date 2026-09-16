@@ -1,2 +1,2 @@
 import { redirect } from 'next/navigation';
-export default function ExportPage(){ redirect('/dashboard/budgets'); }
+export default function ExportPage(){ redirect('/dashboard/reports'); }
