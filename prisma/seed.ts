@@ -3,11 +3,11 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 const TEAMS = [
-  { name: 'Media', approverEmail: 'priya.sales@company.com', budgetTarget: 5000 },
-  { name: 'Worship', approverEmail: 'tom.marketing@company.com', budgetTarget: 4000 },
-  { name: 'Hospitality', approverEmail: 'dana.eng@company.com', budgetTarget: 8000 },
-  { name: 'Evangelism', approverEmail: 'dana.eng@company.com', budgetTarget: 8000 },
-  { name: 'Welcome Team', approverEmail: 'dana.eng@company.com', budgetTarget: 8000 },
+  { name: 'Media', approverEmails: ['priya.sales@company.com'], budgetTarget: 5000 },
+  { name: 'Worship', approverEmails: ['tom.marketing@company.com'], budgetTarget: 4000 },
+  { name: 'Hospitality', approverEmails: ['dana.eng@company.com'], budgetTarget: 8000 },
+  { name: 'Evangelism', approverEmails: ['dana.eng@company.com'], budgetTarget: 8000 },
+  { name: 'Welcome Team', approverEmails: ['dana.eng@company.com'], budgetTarget: 8000 },
 ];
 
 async function main() {

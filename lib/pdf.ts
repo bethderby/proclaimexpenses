@@ -4,7 +4,7 @@ export async function buildStatementPdf(teamName: string, rangeLabel: string, it
   const doc = new PDFDocument({ margin: 42, size: 'A4' });
   const chunks: Buffer[] = [];
   doc.on('data', (c) => chunks.push(c));
-  doc.fontSize(20).fillColor('#0f172a').text(`${teamName} - expense report`);
+  doc.fontSize(20).fillColor('#0f172a').text(`${teamName} - Expense Report`);
   doc.fontSize(10).fillColor('#64748b').text(rangeLabel);
   doc.moveDown(1.2);
   const cols = teamName === 'All teams'

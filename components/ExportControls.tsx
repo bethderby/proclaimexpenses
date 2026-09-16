@@ -25,7 +25,7 @@ export default function ExportControls({ teams, isAdmin }: { teams:{id:string;na
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="flex flex-col gap-1 mb-5">
         <p className="font-semibold text-slate-950">Export report</p>
-        <p className="text-sm text-slate-500">Choose a team and date range, then select the format you want.</p>
+        <p className="text-sm text-slate-500">Choose a team and date range, then select the format you want. Each expense belongs to the team selected on that expense.</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Team
@@ -40,11 +40,11 @@ export default function ExportControls({ teams, isAdmin }: { teams:{id:string;na
         <a href={pdf} className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-[.99]"><FileDown size={16}/> Download PDF</a>
         <a href={xlsx} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 active:scale-[.99]"><FileSpreadsheet size={16}/> Export to Excel</a>
       </div>
-      <p className="mt-4 text-xs text-slate-400">Dates in exported reports use MM-DD-YYYY. The scheduled monthly email report remains unchanged.</p>
+      <p className="mt-4 text-xs text-slate-400">Dates in PDF and Excel reports use DD-MM-YYYY.</p>
     </div>
 
     {isAdmin && <div className="rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm sm:p-6">
-      <div className="flex items-start gap-3"><Mail size={20} className="mt-0.5 shrink-0"/><div><p className="font-semibold">Email this month's expense report</p><p className="mt-1 text-sm text-slate-300">Email the current month's expenses as a PDF report to all admins now.</p></div></div>
+      <div className="flex items-start gap-3"><Mail size={20} className="mt-0.5 shrink-0"/><div><p className="font-semibold">Email this month's Expense Report</p><p className="mt-1 text-sm text-slate-300">Email the current month's expenses as a PDF Expense Report to all admins now.</p></div></div>
       <form action={sendReportNow} className="mt-4"><input type="hidden" name="start" value={iso(first)}/><input type="hidden" name="end" value={iso(today)}/><FormButton pendingLabel="Sending…" className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 active:scale-[.97]">Send now</FormButton></form>
     </div>}
   </div>

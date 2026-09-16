@@ -7,12 +7,12 @@ import StatusPill from '@/components/StatusPill';
 const fmt=(n:number)=>`£${n.toFixed(2)}`;
 export default async function DashboardPage(){
  const session=await getServerSession(authOptions);if(!session?.user)redirect('/login');const user=session.user as any;
- const pendingWhere:any=user.isAdmin?{status:'PENDING'}:user.isApprover?{status:'PENDING',team:{OR:[{approverEmail:{equals:user.email,mode:'insensitive'}},{members:{some:{userId:user.id,role:'APPROVER'}}}]}}:{status:'PENDING',userId:user.id};
+ const pendingWhere:any=user.isAdmin?{status:'PENDING'}:user.isApprover?{status:'PENDING',team:{approverEmails:{has:(user.email??'').toLowerCase()}}}:{status:'PENDING',userId:user.id};
  const [expenses,pending,needsReceipt,ready]=await Promise.all([
   prisma.expense.findMany({where:{userId:user.id},include:{team:true},orderBy:{submittedAt:'desc'},take:5}),
   prisma.expense.count({where:pendingWhere}),
   prisma.expense.count({where:{userId:user.id,status:'ADVANCE_PAID_AWAITING_RECEIPT'}}),
-  user.isAdmin||user.isApprover?prisma.expense.count({where:user.isAdmin?{status:'READY_TO_PAY'}:{status:'READY_TO_PAY',team:{OR:[{approverEmail:{equals:user.email,mode:'insensitive'}},{members:{some:{userId:user.id,role:'APPROVER'}}}]}}}):Promise.resolve(0),
+  user.isAdmin||user.isApprover?prisma.expense.count({where:user.isAdmin?{status:'READY_TO_PAY'}:{status:'READY_TO_PAY',team:{approverEmails:{has:(user.email??'').toLowerCase()}}}}):Promise.resolve(0),
  ]);
  const total=expenses.reduce((s,e)=>s+e.amount,0);
  return <div className="space-y-6 sm:space-y-8"><div><p className="text-sm font-semibold text-emerald-600">Overview</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Good to see you, {user.name?.split(' ')[0]||'there'}.</h1><p className="mt-2 max-w-2xl text-sm text-slate-500">Keep expenses, approvals, receipts and Co-op payment runs in one place.</p></div>

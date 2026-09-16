@@ -54,31 +54,14 @@ model User {
   sessions          Session[]
   expenses          Expense[]
   paymentRunsCreated PaymentRun[]
-  memberships       TeamMember[]
 }
 
 model Team {
   id            String   @id @default(cuid())
   name          String   @unique
-  approverEmail String?
-  budgetTarget  Float    @default(0)
-  expenses      Expense[]
-  members       TeamMember[]
-}
-
-model TeamMember {
-  id        String         @id @default(cuid())
-  role      TeamMemberRole @default(USER)
-  userId    String
-  teamId    String
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  team      Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  @@unique([userId, teamId])
-}
-
-enum TeamMemberRole {
-  USER
-  APPROVER
+  approverEmails String[] @default([])
+  budgetTarget   Float    @default(0)
+  expenses       Expense[]
 }
 
 enum PurchaseStatus {

@@ -19,11 +19,11 @@ async function requireUser() {
 }
 
 async function getTeamApproverEmails(teamId: string) {
-  const team = await prisma.team.findUnique({ where: { id: teamId }, include: { members: { where: { role: 'APPROVER' }, include: { user: { select: { email: true } } } } } });
+  const team = await prisma.team.findUnique({ where: { id: teamId } });
   if (!team) throw new Error('That team no longer exists.');
-  const emails = [...new Set([team.approverEmail, ...team.members.map(m => m.user.email)].filter(Boolean).map(e => e!.toLowerCase()))];
-  if (!emails.length) throw new Error('That team does not have an approver configured yet. Ask an admin to set one.');
-  return { team, approverEmails: emails };
+  const approverEmails = [...new Set(team.approverEmails.map(e => e.trim().toLowerCase()).filter(Boolean))];
+  if (!approverEmails.length) throw new Error('That team does not have an approver configured yet. Ask an admin to set one.');
+  return { team, approverEmails };
 }
 
 async function notify(to: string | string[], subject: string, html: string, text: string) {
@@ -46,6 +46,9 @@ export async function submitExpense(formData: FormData) {
   const purchaseStatus = String(formData.get('purchaseStatus') || '') as 'ALREADY_PURCHASED' | 'NOT_PURCHASED';
   const paymentTiming = String(formData.get('paymentTiming') || '') as 'AFTER_PURCHASE' | 'ADVANCE';
 
+  const payoutUser = await prisma.user.findUnique({ where: { id: user.id }, select: { bankAccountName: true, bankSortCode: true, bankAccountNumber: true } });
+  const hasBankDetails = !!(payoutUser?.bankAccountName && payoutUser.bankSortCode && payoutUser.bankAccountNumber);
+  if (!hasBankDetails) throw new Error('Add your bank details before submitting an expense so you can be paid.');
   if (!teamId) throw new Error('Choose which team this expense is for.');
   if (!description || !amount || amount <= 0) throw new Error('Add a description and an amount greater than zero.');
   if (!date || Number.isNaN(new Date(date).getTime())) throw new Error('Choose a valid date.');
@@ -69,7 +72,7 @@ export async function submitExpense(formData: FormData) {
     },
   });
 
-  const requester = escapeHtml(user.name || user.email || 'A team member');
+  const requester = escapeHtml(user.name || user.email || 'A person');
   const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
   const approvalUrl = `${appUrl}/dashboard/approvals`;
   const purchaseText = purchaseStatus === 'ALREADY_PURCHASED'
@@ -120,10 +123,10 @@ export async function cancelExpense(formData: FormData) {
 
 export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'REJECTED', note: string) {
   const user = await requireUser();
-  const expense = await prisma.expense.findUnique({ where: { id: expenseId }, include: { team: { include: { members: { where: { role: 'APPROVER' }, include: { user: { select: { email: true } } } } } }, user: true } });
+  const expense = await prisma.expense.findUnique({ where: { id: expenseId }, include: { team: true, user: true } });
   if (!expense) throw new Error('Expense not found.');
   const email = (user.email ?? '').toLowerCase();
-  const isTeamApprover = !!email && ([expense.team.approverEmail, ...expense.team.members.map(m => m.user.email)].filter(Boolean) as string[]).some(e => e.toLowerCase() === email);
+  const isTeamApprover = !!email && expense.team.approverEmails.some(e => e.toLowerCase() === email);
   if (!user.isAdmin && !isTeamApprover) throw new Error("Only this team's configured approver can decide this expense.");
   if (expense.status !== 'PENDING') throw new Error('This expense has already been decided.');
   if (decision === 'APPROVED' && expense.purchaseStatus === 'ALREADY_PURCHASED' && !expense.receiptUrl) throw new Error('A receipt is required before an already-purchased expense can be approved.');
@@ -262,9 +265,10 @@ export async function createWisePaymentRun() {
   if (!user.isAdmin && !user.isApprover) throw new Error('Only approvers or admins can create payment runs.');
   if (!isWiseConfigured()) throw new Error('Wise is not configured. Add WISE_API_TOKEN and WISE_PROFILE_ID first.');
 
+  const approverEmail = (user.email ?? '').toLowerCase();
   const where: any = user.isAdmin
     ? { paymentStatus: 'READY' }
-    : { paymentStatus: 'READY', team: { OR: [{ approverEmail: { equals: user.email, mode: 'insensitive' } }, { members: { some: { userId: user.id, role: 'APPROVER' } } }] } };
+    : { paymentStatus: 'READY', team: { approverEmails: { has: approverEmail } } };
 
   const expenses = await prisma.expense.findMany({
     where,
@@ -272,7 +276,7 @@ export async function createWisePaymentRun() {
     orderBy: { submittedAt: 'asc' },
   });
   const eligible = expenses.filter(e => e.user.bankAccountName && e.user.bankSortCode && e.user.bankAccountNumber);
-  if (!eligible.length) throw new Error('No ready expenses with complete bank details are available for your teams.');
+  if (!eligible.length) throw new Error('No ready expenses with complete bank details are available.');
 
   // This key is stable for the exact set of expenses being prepared. The
   // unique DB index makes the Prepare action safe even when two requests hit
@@ -576,8 +580,8 @@ export async function updateBudget(teamId: string, target: number) {
   const user = await requireUser();
   const team = await prisma.team.findUnique({ where: { id: teamId } });
   if (!team) throw new Error('Team not found.');
-  const allowed = user.isAdmin || !!(await prisma.teamMember.findFirst({ where: { teamId, userId: user.id, role: 'APPROVER' } })) || team.approverEmail?.toLowerCase() === (user.email ?? '').toLowerCase();
-  if (!allowed) throw new Error("Only this team's approver or an admin can change its budget.");
+  const allowed = user.isAdmin || team.approverEmails.some(e => e.toLowerCase() === (user.email ?? '').toLowerCase());
+  if (!allowed) throw new Error("Only this team's configured approver or an admin can change its budget.");
   await prisma.team.update({ where: { id: teamId }, data: { budgetTarget: target } });
   revalidatePath('/dashboard/budgets');
 }
@@ -590,13 +594,7 @@ export async function createTeam(formData: FormData) {
   const budgetTarget = parseFloat((formData.get('budgetTarget') as string) || '0') || 0;
   if (!name) throw new Error('A team name is required.');
   if (!approverEmails.length || approverEmails.some(e => !e.includes('@'))) throw new Error('Add at least one valid approver email.');
-  await prisma.$transaction(async tx => {
-    const team = await tx.team.create({ data: { name, approverEmail: approverEmails[0], budgetTarget } });
-    for (const email of approverEmails) {
-      const approver = await tx.user.upsert({ where: { email }, update: {}, create: { email } });
-      await tx.teamMember.upsert({ where: { userId_teamId: { userId: approver.id, teamId: team.id } }, update: { role: 'APPROVER' }, create: { userId: approver.id, teamId: team.id, role: 'APPROVER' } });
-    }
-  });
+  await prisma.team.create({ data: { name, approverEmails, budgetTarget } });
   revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/approvals');
 }
 
@@ -609,14 +607,7 @@ export async function updateTeam(formData: FormData) {
   const budgetTarget = parseFloat((formData.get('budgetTarget') as string) || '0') || 0;
   if (!teamId || !name) throw new Error('A team name is required.');
   if (!approverEmails.length || approverEmails.some(e => !e.includes('@'))) throw new Error('Add at least one valid approver email.');
-  await prisma.$transaction(async tx => {
-    await tx.team.update({ where: { id: teamId }, data: { name, approverEmail: approverEmails[0], budgetTarget } });
-    await tx.teamMember.deleteMany({ where: { teamId, role: 'APPROVER' } });
-    for (const email of approverEmails) {
-      const approver = await tx.user.upsert({ where: { email }, update: {}, create: { email } });
-      await tx.teamMember.upsert({ where: { userId_teamId: { userId: approver.id, teamId } }, update: { role: 'APPROVER' }, create: { userId: approver.id, teamId, role: 'APPROVER' } });
-    }
-  });
+  await prisma.team.update({ where: { id: teamId }, data: { name, approverEmails, budgetTarget } });
   revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/budgets'); revalidatePath('/dashboard/expenses');
 }
 
@@ -627,32 +618,9 @@ export async function deleteTeam(formData: FormData) {
   if (!teamId) throw new Error('Team not found.');
   await prisma.$transaction(async tx => {
     await tx.expense.deleteMany({ where: { teamId } });
-    await tx.teamMember.deleteMany({ where: { teamId } });
     await tx.team.delete({ where: { id: teamId } });
   });
   revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/budgets'); revalidatePath('/dashboard/approvals');
-}
-
-export async function upsertTeamMember(formData: FormData) {
-  const user = await requireUser();
-  if (!user.isAdmin) throw new Error('Only admins can manage team members.');
-  const teamId = String(formData.get('teamId') || '');
-  const email = String(formData.get('email') || '').trim().toLowerCase();
-  const role = String(formData.get('role') || 'USER') as 'USER' | 'APPROVER';
-  if (!teamId || !email || !email.includes('@')) throw new Error('Enter a valid email address.');
-  if (!['USER','APPROVER'].includes(role)) throw new Error('Invalid team role.');
-  const member = await prisma.user.upsert({ where: { email }, update: { removedAt: null }, create: { email } });
-  await prisma.teamMember.upsert({ where: { userId_teamId: { userId: member.id, teamId } }, update: { role }, create: { userId: member.id, teamId, role } });
-  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals');
-}
-
-export async function removeTeamMember(formData: FormData) {
-  const user = await requireUser();
-  if (!user.isAdmin) throw new Error('Only admins can manage team members.');
-  const teamId = String(formData.get('teamId') || '');
-  const userId = String(formData.get('userId') || '');
-  await prisma.teamMember.deleteMany({ where: { teamId, userId } });
-  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals');
 }
 
 export async function setAdminStatus(formData: FormData) {
@@ -676,9 +644,7 @@ export async function removeUser(formData: FormData) {
   if (!target) throw new Error('User not found.');
   if (target.removedAt) return;
   await prisma.$transaction(async tx => {
-    await tx.teamMember.deleteMany({ where: { userId: target.id } });
     await tx.session.deleteMany({ where: { userId: target.id } });
-    if (target.email) await tx.team.updateMany({ where: { approverEmail: { equals: target.email, mode: 'insensitive' } }, data: { approverEmail: null } });
     // Reset their account, not their history: clear stored payout bank
     // details (no reason to keep live bank credentials for someone no
     // longer active) but leave every Expense/PaymentRun row untouched -

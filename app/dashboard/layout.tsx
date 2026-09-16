@@ -11,7 +11,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const pendingCount = user.isAdmin
     ? await prisma.expense.count({ where: { status: 'PENDING' } })
     : user.isApprover
-      ? await prisma.expense.count({ where: { status: 'PENDING', team: { OR: [{ approverEmail: { equals: user.email, mode: 'insensitive' } }, { members: { some: { userId: user.id, role: 'APPROVER' } } }] } } })
+      ? await prisma.expense.count({ where: { status: 'PENDING', team: { approverEmails: { has: (user.email ?? '').toLowerCase() } } } })
       : 0;
 
   return (
