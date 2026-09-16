@@ -21,7 +21,7 @@ export default function TeamManager({teams=[],newButton=false}:{teams?:Team[];ne
 
  return <div className="space-y-3">
    {/* Desktop/tablet: full table. */}
-   <div className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
+   <div className="panel hidden overflow-hidden md:block">
      <div className="overflow-x-auto">
        <table className="w-full border-collapse text-left">
          <thead className="border-b border-slate-200 bg-slate-50">
@@ -55,7 +55,7 @@ export default function TeamManager({teams=[],newButton=false}:{teams?:Team[];ne
    <div className="grid gap-3 md:hidden">
      {teams.map(t=>{
        const pct=t.budgetTarget?Math.min(100,t.spent/t.budgetTarget*100):0;
-       return <article key={t.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+       return <article key={t.id} className="panel p-4 shadow-none">
          <div className="flex items-start justify-between gap-3">
            <div className="min-w-0"><h3 className="truncate text-base font-semibold text-slate-900">{t.name}</h3><p className="mt-1 text-xs text-slate-500">{t.pending > 0 ? `${t.pending} pending expense${t.pending === 1 ? '' : 's'}` : 'No pending expenses'}</p></div>
            <div className="flex shrink-0 gap-1"><button type="button" onClick={()=>{setEditing(t);setOpen(true)}} aria-label={`Edit ${t.name}`} title="Edit team" className="rounded-lg p-2 text-stone-600 hover:bg-slate-100 hover:text-slate-900"><Pencil size={17}/></button><form action={deleteTeam}><input type="hidden" name="teamId" value={t.id}/><FormButton pendingLabel="Deleting…" className="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={17}/></FormButton></form></div>

@@ -9,7 +9,7 @@ export default function ApprovalRow({ expense }: { expense: { id:string; descrip
  const [note,setNote]=useState(''); const [pending,startTransition]=useTransition(); const [action,setAction]=useState<string|null>(null);
  function decide(status:'APPROVED'|'REJECTED'){setAction(status);startTransition(async()=>{try{await decideExpense(expense.id,status,note)}finally{setAction(null)}})}
  const mode=expense.purchaseStatus==='ALREADY_PURCHASED'?'Already purchased':expense.paymentTiming==='ADVANCE'?'Needs advance':'Will purchase later and claim reimbursement';
- return <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+ return <div className="panel p-5">
    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="font-semibold text-stone-900">{expense.description}</p><p className="mt-1 text-xs text-stone-500">{expense.userName} · {expense.teamName} · {expense.date}</p></div><div className="flex shrink-0 items-center gap-2"><StatusPill status={expense.status}/><span className="font-bold text-stone-900">{fmt(expense.amount)}</span></div></div>
    <div className="mt-4 flex flex-wrap gap-2"><span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600"><WalletCards size={13}/>{mode}</span>{expense.receiptUrl && <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF8E1] px-2.5 py-1 text-xs font-medium text-[#C99600]"><ReceiptText size={13}/>Receipt attached</span>}</div>
    {expense.receiptUrl && <a href={`/api/receipts/${expense.id}`} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs font-semibold text-[#C99600] hover:underline">View receipt</a>}

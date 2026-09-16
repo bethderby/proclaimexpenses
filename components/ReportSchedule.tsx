@@ -4,7 +4,7 @@ import { saveReportSchedule } from '@/app/actions';
 export default function ReportSchedule({ enabled, dayOfMonth, recipients }: { enabled: boolean; dayOfMonth: number; recipients: string[] }) {
   const recipientText = recipients.join('\n');
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    <div className="panel p-5 sm:p-6">
       <div className="flex flex-col gap-1">
         <p className="font-semibold text-slate-950">Automatic report schedule</p>
         <p className="text-sm text-slate-500">Choose whether the monthly Expense Report is sent automatically, which day it is sent, and who receives it.</p>

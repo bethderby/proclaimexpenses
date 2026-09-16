@@ -59,7 +59,7 @@ export default function ExpenseRow({ expense, teams, variant }:{ expense:{id:str
  </div>;
 
  return <div className="border-b border-slate-100 p-3 last:border-0">
-   <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+   <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,.03)]">
      <div className="flex items-start justify-between gap-3">
        <div className="min-w-0 flex-1">
          <p className="text-[11px] font-medium text-slate-500">{fmtDate(expense.date)}</p>
