@@ -446,7 +446,7 @@ export async function syncWisePaymentRun(formData: FormData) {
   const batch = await getWiseBatchGroup(run.wiseBatchGroupId);
   const batchTransferIds = Array.isArray(batch.transferIds) ? batch.transferIds.map((id: unknown) => String(id)) : [];
   const knownTransferIds = new Set(run.expenses.map(e => e.wiseTransferId).filter(Boolean).map(String));
-  const missingTransferIds = batchTransferIds.filter(id => !knownTransferIds.has(id));
+  const missingTransferIds = batchTransferIds.filter((id: string) => !knownTransferIds.has(id));
   const batchTransfers = await Promise.all(missingTransferIds.map(id => getWiseTransfer(id)));
 
   // Recover any transfer that Wise created successfully but Proclaim did not
