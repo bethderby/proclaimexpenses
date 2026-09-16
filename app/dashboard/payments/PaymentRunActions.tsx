@@ -19,7 +19,7 @@ export function PrepareWiseButton({ disabled }: { disabled: boolean }) {
     setBusy(true);
     setError('');
     try {
-      await createWisePaymentRun(new FormData());
+      await createWisePaymentRun();
       router.refresh();
     } catch (error) {
       setError(friendlyError(error));
