@@ -89,7 +89,7 @@ export async function submitExpense(formData: FormData) {
     `${requester} submitted a £${amount.toFixed(2)} expense for ${team.name}.\n\n${description}\n\n${purchaseText}\n\n${approvalUrl || 'Open Proclaim Expenses to review it.'}`
   );
 
-  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard');
+  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard');
   redirect('/dashboard/expenses');
 }
 
@@ -109,7 +109,7 @@ export async function updateExpense(formData: FormData) {
   const team = await prisma.team.findUnique({ where: { id: teamId } });
   if (!team) throw new Error('That team no longer exists.');
   await prisma.expense.update({ where: { id: expenseId }, data: { date: new Date(date), description, amount, teamId } });
-  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard');
+  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard');
 }
 
 export async function cancelExpense(formData: FormData) {
@@ -119,7 +119,7 @@ export async function cancelExpense(formData: FormData) {
   if (!expense || expense.userId !== user.id) throw new Error('Expense not found.');
   if (expense.status !== 'PENDING' && expense.status !== 'AWAITING_PURCHASE') throw new Error('This expense can no longer be cancelled.');
   await prisma.expense.update({ where: { id: expenseId }, data: { status: 'CANCELLED' } });
-  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard');
+  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard');
 }
 
 export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'REJECTED', note: string) {
@@ -161,23 +161,44 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
     }
   }
 
+  if (expense.relatedExpenseId) {
+    const extraAmount = expense.amount;
+    const original = await prisma.expense.findUnique({ where: { id: expense.relatedExpenseId }, select: { id: true, advanceAmount: true, actualAmount: true } });
+    if (original) {
+      const originalAdvance = original.advanceAmount ?? 0;
+      const originalActual = original.actualAmount ?? (originalAdvance + extraAmount);
+      const originalNote = decision === 'APPROVED'
+        ? (wisePreparedAutomatically
+          ? `You were advanced £${originalAdvance.toFixed(2)} but the receipt shows £${originalActual.toFixed(2)}. The extra £${extraAmount.toFixed(2)} was approved and has been added to a Wise payment run.`
+          : `You were advanced £${originalAdvance.toFixed(2)} but the receipt shows £${originalActual.toFixed(2)}. The extra £${extraAmount.toFixed(2)} was approved and is ready for payment. It will be prepared in Wise automatically when possible.`)
+        : `You were advanced £${originalAdvance.toFixed(2)} but the receipt shows £${originalActual.toFixed(2)}. The extra £${extraAmount.toFixed(2)} reimbursement was not approved.`;
+      await prisma.expense.update({ where: { id: original.id }, data: { settlementNote: originalNote } });
+    }
+  }
+
   if (expense.user.email) {
     const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
-    const expensesUrl = `${appUrl}/dashboard/expenses`;
+    const expensesUrl = `${appUrl}/dashboard/expense-history`;
     const approved = decision === 'APPROVED';
-    const extra = expense.purchaseStatus === 'NOT_PURCHASED' && expense.paymentTiming === 'ADVANCE' && approved
-      ? (wisePreparedAutomatically
-        ? 'Your advance has been approved and the payment batch has been prepared in Wise and is waiting there for funding/confirmation.'
-        : 'Your advance has been approved and is ready for a Wise payment run. If Wise preparation could not be completed automatically, it can be prepared from the Payments page.')
-      : expense.purchaseStatus === 'NOT_PURCHASED' && approved
-        ? 'Once you buy the item, open this expense, mark it as purchased, upload the receipt and it will become ready for reimbursement.'
-        : approved
-          ? (wisePreparedAutomatically
-            ? 'Your reimbursement has been approved and the payment batch has been prepared in Wise and is waiting there for funding/confirmation.'
-            : wisePreparationError
-              ? 'Your reimbursement was approved, but the Wise batch could not be prepared automatically. It remains ready to pay and can be prepared from the Payments page.'
-              : 'It can now move to payment.')
-          : 'The approver did not approve this expense.';
+    const extra = expense.relatedExpenseId
+      ? (approved
+        ? (wisePreparedAutomatically
+          ? 'Your extra reimbursement has been approved and the payment batch has been prepared in Wise and is waiting there for funding/confirmation.'
+          : 'Your extra reimbursement has been approved and is ready for payment. If Wise preparation could not be completed automatically, it can be prepared from the Payments page.')
+        : 'Your extra reimbursement was not approved. Please speak to your approver if you need more information.')
+      : expense.purchaseStatus === 'NOT_PURCHASED' && expense.paymentTiming === 'ADVANCE' && approved
+        ? (wisePreparedAutomatically
+          ? 'Your advance has been approved and the payment batch has been prepared in Wise and is waiting there for funding/confirmation.'
+          : 'Your advance has been approved and is ready for a Wise payment run. If Wise preparation could not be completed automatically, it can be prepared from the Payments page.')
+        : expense.purchaseStatus === 'NOT_PURCHASED' && approved
+          ? 'Once you buy the item, open Expense History, mark it as purchased, upload the receipt and it will become ready for reimbursement.'
+          : approved
+            ? (wisePreparedAutomatically
+              ? 'Your reimbursement has been approved and the payment batch has been prepared in Wise and is waiting there for funding/confirmation.'
+              : wisePreparationError
+                ? 'Your reimbursement was approved, but the Wise batch could not be prepared automatically. It remains ready to pay and can be prepared from the Payments page.'
+                : 'It can now move to payment.')
+            : 'The approver did not approve this expense.';
     await notify(
       expense.user.email,
       `${approved ? 'Approved' : 'Declined'} expense - £${expense.amount.toFixed(2)}`,
@@ -186,7 +207,7 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
     );
   }
 
-  revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard');
+  revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard');
 }
 
 export async function markExpensePurchased(formData: FormData) {
@@ -222,33 +243,46 @@ export async function markExpensePurchased(formData: FormData) {
       data: { purchasedAt: new Date(date), receiptUrl, actualAmount, receiptDueAt: null, lastReminderAt: null, status: 'PAID', settlementStatus, settlementNote },
     });
 
-    // The additional amount owed to the requester can't just be added back
-    // onto the original expense - that one's already marked PAID and has
-    // already been through a Wise batch. Instead it becomes its own small
-    // expense, already "approved" (it's a top-up of something already
-    // approved) and immediately ready for the next Wise payment run.
+    // An extra reimbursement must be approved again. It is created as a
+    // normal pending expense and linked to the original advance. Once an
+    // approver approves it, decideExpense() automatically prepares the next
+    // Wise payment run just like any other approved reimbursement.
     if (settlementStatus === 'ADDITIONAL_REIMBURSEMENT_REQUIRED') {
-      await prisma.expense.create({
+      const extraAmount = Math.abs(difference);
+      const extra = await prisma.expense.create({
         data: {
           teamId: expense.teamId,
           userId: expense.userId,
           description: `Additional reimbursement - ${expense.description}`,
-          amount: Math.abs(difference),
-          approvedAmount: Math.abs(difference),
+          amount: extraAmount,
           purchaseStatus: 'ALREADY_PURCHASED',
           paymentTiming: 'AFTER_PURCHASE',
           date: new Date(date),
           receiptUrl,
           purchasedAt: new Date(date),
-          actualAmount: Math.abs(difference),
-          status: 'READY_TO_PAY',
-          paymentStatus: 'READY',
+          actualAmount: extraAmount,
+          status: 'PENDING',
+          paymentStatus: 'NOT_READY',
           settlementStatus: 'NOT_APPLICABLE',
-          decisionNote: `Auto-created: balance owed after reconciling advance on "${expense.description}".`,
-          decidedAt: new Date(),
+          decisionNote: `Additional reimbursement requires approval after reconciling the advance on "${expense.description}".`,
+          relatedExpenseId: expense.id,
         },
       });
+      const approverEmails = [...new Set(expense.team.approverEmails.map(e => e.trim().toLowerCase()).filter(Boolean))];
+      const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+      const approvalUrl = `${appUrl}/dashboard/approvals`;
+      await notify(
+        approverEmails,
+        `Extra reimbursement needs approval - £${extraAmount.toFixed(2)}`,
+        `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a"><h2>Extra reimbursement needs approval</h2><p style="color:#64748b">An advance reconciliation has created an additional reimbursement for <strong>${escapeHtml(expense.userId === user.id ? (user.name || user.email || 'the requester') : 'the requester')}</strong>.</p><div style="padding:18px;border:1px solid #e2e8f0;border-radius:14px;margin:20px 0"><p style="margin:0 0 8px;font-size:20px;font-weight:700">£${extraAmount.toFixed(2)}</p><p style="margin:0;color:#475569">${escapeHtml(expense.description)}</p><p style="margin:8px 0 0;color:#64748b">The requester was advanced £${advance.toFixed(2)} and the receipt shows £${actualAmount.toFixed(2)}.</p></div>${approvalUrl ? `<a href="${approvalUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Review reimbursement</a>` : ''}<p style="margin-top:28px;font-size:12px;color:#94a3b8">Proclaim Expenses</p></div>`,
+        `An extra reimbursement of £${extraAmount.toFixed(2)} needs approval for ${expense.description}.
+
+${approvalUrl || 'Open Proclaim Expenses to review it.'}`
+      );
+      settlementNote = `You were advanced £${advance.toFixed(2)} but the receipt shows £${actualAmount.toFixed(2)}. The extra £${extraAmount.toFixed(2)} has been submitted as a separate reimbursement and is waiting for approver approval.`;
+      await prisma.expense.update({ where: { id: expense.id }, data: { settlementNote } });
     }
+
 
     if (user.email && settlementNote) {
       await notify(
@@ -261,7 +295,7 @@ export async function markExpensePurchased(formData: FormData) {
   } else {
     await prisma.expense.update({ where: { id: expenseId }, data: { purchasedAt: new Date(date), receiptUrl, actualAmount, receiptDueAt: null, lastReminderAt: null, status: 'READY_TO_PAY', paymentStatus: 'READY', settlementStatus: 'NOT_APPLICABLE' } });
   }
-  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard'); revalidatePath('/dashboard/payments');
+  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard'); revalidatePath('/dashboard/payments');
 }
 
 export async function updateBankDetails(formData: FormData) {
@@ -273,7 +307,7 @@ export async function updateBankDetails(formData: FormData) {
   if (!/^\d{6}$/.test(sortCode)) throw new Error('Sort code must contain 6 digits.');
   if (!/^\d{8}$/.test(accountNumber)) throw new Error('Account number must contain 8 digits.');
   await prisma.user.update({ where: { id: user.id }, data: { bankAccountName: encryptBankDetail(accountName), bankSortCode: encryptBankDetail(sortCode), bankAccountNumber: encryptBankDetail(accountNumber) } });
-  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/payments');
+  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard/payments');
 }
 
 export async function createWisePaymentRun() {
@@ -457,7 +491,7 @@ export async function createWisePaymentRun() {
   }
 
   revalidatePath('/dashboard/payments');
-  revalidatePath('/dashboard/expenses');
+  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history');
 }
 
 
@@ -467,7 +501,7 @@ export async function syncWisePaymentRun(formData: FormData) {
   const runId = String(formData.get('runId') || '');
   if (!runId) throw new Error('Payment run not found.');
   await syncWisePaymentRunById(runId);
-  revalidatePath('/dashboard/payments'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard');
+  revalidatePath('/dashboard/payments'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard');
 }
 
 export async function cancelPaymentRun(formData: FormData) {
@@ -513,7 +547,7 @@ export async function cancelPaymentRun(formData: FormData) {
     await tx.expense.updateMany({ where: { paymentRunId: runId, status: 'PAYMENT_PENDING', purchaseStatus: 'NOT_PURCHASED' }, data: { paymentRunId: null, paymentStatus: 'READY', status: 'AWAITING_PURCHASE', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null } });
     await tx.expense.updateMany({ where: { paymentRunId: runId, status: 'PAYMENT_PENDING', purchaseStatus: 'ALREADY_PURCHASED' }, data: { paymentRunId: null, paymentStatus: 'READY', status: 'READY_TO_PAY', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null } });
   });
-  revalidatePath('/dashboard/payments'); revalidatePath('/dashboard/expenses');
+  revalidatePath('/dashboard/payments'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history');
 }
 
 export async function updateBudget(teamId: string, target: number) {
@@ -535,7 +569,7 @@ export async function createTeam(formData: FormData) {
   if (!name) throw new Error('A team name is required.');
   if (!approverEmails.length || approverEmails.some(e => !e.includes('@'))) throw new Error('Add at least one valid approver email.');
   await prisma.team.create({ data: { name, approverEmails, budgetTarget } });
-  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/approvals');
+  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard/approvals');
 }
 
 export async function updateTeam(formData: FormData) {
@@ -548,7 +582,7 @@ export async function updateTeam(formData: FormData) {
   if (!teamId || !name) throw new Error('A team name is required.');
   if (!approverEmails.length || approverEmails.some(e => !e.includes('@'))) throw new Error('Add at least one valid approver email.');
   await prisma.team.update({ where: { id: teamId }, data: { name, approverEmails, budgetTarget } });
-  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/reports'); revalidatePath('/dashboard/expenses');
+  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/reports'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history');
 }
 
 export async function deleteTeam(formData: FormData) {
@@ -560,7 +594,7 @@ export async function deleteTeam(formData: FormData) {
     await tx.expense.deleteMany({ where: { teamId } });
     await tx.team.delete({ where: { id: teamId } });
   });
-  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/reports'); revalidatePath('/dashboard/approvals');
+  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard/reports'); revalidatePath('/dashboard/approvals');
 }
 
 export async function setAdminStatus(formData: FormData) {
@@ -591,7 +625,7 @@ export async function removeUser(formData: FormData) {
     // those stay linked to this User row for accounting.
     await tx.user.update({ where: { id: target.id }, data: { isAdmin: false, removedAt: new Date(), bankAccountName: null, bankSortCode: null, bankAccountNumber: null } });
   });
-  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/expenses');
+  revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history');
 }
 
 function parseReportRecipients(value: string) {

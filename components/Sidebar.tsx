@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import { Receipt, Inbox, BarChart3, Wallet, Users, LogOut, Menu, X, CreditCard } from 'lucide-react';
+import { Receipt, History, Inbox, BarChart3, Wallet, Users, LogOut, Menu, X, CreditCard } from 'lucide-react';
 
 export default function Sidebar({ name, email, isApprover, isAdmin, pendingCount }: { name: string; email: string; isApprover: boolean; isAdmin: boolean; pendingCount: number }) {
   const pathname = usePathname();
@@ -16,7 +16,8 @@ export default function Sidebar({ name, email, isApprover, isAdmin, pendingCount
   const items = [
     { href: '/dashboard', label: 'Overview', icon: Wallet },
     
-    { href: '/dashboard/expenses', label: 'Expenses', icon: Receipt },
+    { href: '/dashboard/expenses', label: 'Submit expense', icon: Receipt },
+    { href: '/dashboard/expense-history', label: 'Expense History', icon: History },
     ...(isApprover ? [{ href: '/dashboard/approvals', label: 'Approvals', icon: Inbox, badge: pendingCount }, { href: '/dashboard/payments', label: 'Payments', icon: CreditCard }] : []),
     ...(isAdmin ? [{ href: '/dashboard/reports', label: 'Reports', icon: BarChart3 }, { href: '/dashboard/teams', label: 'Admin Portal', icon: Users }] : []),
   ];

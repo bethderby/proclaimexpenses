@@ -174,4 +174,5 @@ model Expense {
   wiseTransferId     String?
   wiseBatchGroupId   String?
   wiseStatus         String?
+  relatedExpenseId   String?
 }

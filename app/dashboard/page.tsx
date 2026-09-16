@@ -58,16 +58,16 @@ export default async function DashboardPage(){
   </header>
 
   <section className="metric-grid" aria-label="Expense summary">
-    <MetricCard label="My expenses" value={expenses.length} note={`${fmt(total)} across recent expenses`} icon={ReceiptText} tone="gold" href="/dashboard/expenses" />
+    <MetricCard label="My expenses" value={expenses.length} note={`${fmt(total)} across recent expenses`} icon={ReceiptText} tone="gold" href="/dashboard/expense-history" />
     <MetricCard label="Waiting for approval" value={pending} note="Expenses not yet approved" icon={Clock3} tone="blue" href="/dashboard/approvals" />
-    <MetricCard label="Receipt needed" value={needsReceipt} note="Advances awaiting receipt" icon={CheckCircle2} tone="green" href="/dashboard/expenses" />
+    <MetricCard label="Receipt needed" value={needsReceipt} note="Advances awaiting receipt" icon={CheckCircle2} tone="green" href="/dashboard/expense-history" />
     {(user.isAdmin||user.isApprover)&&<MetricCard label="Ready to pay" value={ready} note="Ready for payment runs" icon={CreditCard} tone="purple" href="/dashboard/payments" />}
   </section>
 
   <section className="panel dashboard-panel overflow-hidden">
     <div className="panel-header dashboard-panel-header">
       <div><p className="panel-kicker">Activity</p><h2 className="panel-title">Recent expenses</h2><p className="panel-subtitle">Your latest expense activity</p></div>
-      <Link href="/dashboard/expenses" className="panel-link">View all <ArrowUpRight size={14}/></Link>
+      <Link href="/dashboard/expense-history" className="panel-link">View all <ArrowUpRight size={14}/></Link>
     </div>
     <div className="divide-y divide-slate-100">
       {expenses.length===0?<div className="empty-state m-4">No expenses yet.</div>:expenses.map(e=><div key={e.id} className="expense-summary-row">
