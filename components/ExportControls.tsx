@@ -43,8 +43,7 @@ export default function ExportControls({ teams, isAdmin }: { teams:{id:string;na
 
     {isAdmin && <>
       <div className="rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm sm:p-6">
-        <div className="flex items-start gap-3"><Mail size={20} className="mt-0.5 shrink-0"/><div><p className="font-semibold">Email this month's Expense Report</p><p className="mt-1 text-sm text-slate-300">Send the current month's expenses as a PDF Expense Report now. It will use the recipients saved below.</p></div></div>
-        <form action={sendReportNow} className="mt-4 flex w-full justify-start"><input type="hidden" name="start" value={iso(first)}/><input type="hidden" name="end" value={iso(today)}/><FormButton pendingLabel="Sending…" className="inline-flex min-h-[42px] w-full items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 active:scale-[.97] sm:w-auto">Send now</FormButton></form>
+        <div className="grid grid-cols-[20px_minmax(0,1fr)] items-start gap-3"><Mail size={20} className="mt-0.5 shrink-0"/><div><p className="font-semibold">Email this month's Expense Report</p><p className="mt-1 text-sm text-slate-300">Send the current month's expenses as a PDF Expense Report now. It will use the recipients saved below.</p><form action={sendReportNow} className="mt-4 flex w-full justify-start"><input type="hidden" name="start" value={iso(first)}/><input type="hidden" name="end" value={iso(today)}/><FormButton pendingLabel="Sending…" className="inline-flex min-h-[42px] w-full items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 active:scale-[.97] sm:w-auto">Send now</FormButton></form></div></div>
       </div>
     </>}
   </div>

@@ -3,13 +3,13 @@ import { buildStatementPdf } from '@/lib/pdf';
 import { formatReportDate } from '@/lib/date';
 
 async function getReportRecipients(configured?: string[]) {
-  const cleaned = [...new Set((configured ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean))];
-  if (cleaned.length) return cleaned;
+  const configuredRecipients = (configured ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean);
   const admins = await prisma.user.findMany({
     where: { isAdmin: true, removedAt: null, email: { not: null } },
     select: { email: true },
   });
-  return admins.map((a) => a.email!).filter(Boolean);
+  const adminRecipients = admins.map((a) => a.email!).filter(Boolean);
+  return [...new Set([...adminRecipients, ...configuredRecipients])];
 }
 
 export async function sendCombinedReport(start: Date, end: Date, opts: { manual?: boolean; recipients?: string[] } = {}) {
