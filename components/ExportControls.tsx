@@ -1,3 +1,4 @@
+import { formatUKDate } from '@/lib/date';
 'use client';
 import { useMemo, useState } from 'react';
 import { FileSpreadsheet, FileDown, Mail } from 'lucide-react';
@@ -8,7 +9,7 @@ import FormButton from './FormButton';
 export default function ExportControls({ teams, isAdmin }: { teams:{id:string;name:string}[]; isAdmin:boolean }) {
   const today = new Date();
   const first = new Date(today.getFullYear(), today.getMonth(), 1);
-  const iso = (d:Date) => formatUKDate(d).slice(0,10);
+  const iso = (d:Date) => d.toISOString().slice(0,10);
   const [teamId, setTeamId] = useState('');
   const [start, setStart] = useState(iso(first));
   const [end, setEnd] = useState(iso(today));
