@@ -70,7 +70,7 @@ export default function DateField({
         }}
         className={`flex h-10 w-full items-center justify-between rounded-xl border px-3 text-left text-sm outline-none focus:ring-2 ${
           dark
-            ? 'border-0 bg-white/10 text-white focus:ring-[#FDCF37]'
+            ? 'border-0 bg-white/10 text-white focus:ring-[#C99600]'
             : 'border-slate-200 bg-white text-slate-900 focus:ring-slate-900'
         }`}
         aria-label={display ? `Selected date ${display}` : 'Select date'}

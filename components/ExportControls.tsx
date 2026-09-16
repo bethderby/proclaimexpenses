@@ -40,7 +40,6 @@ export default function ExportControls({ teams, isAdmin }: { teams:{id:string;na
         <a href={pdf} className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-[.99]"><FileDown size={16}/> Download PDF</a>
         <a href={xlsx} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 active:scale-[.99]"><FileSpreadsheet size={16}/> Export to Excel</a>
       </div>
-      <p className="mt-4 text-xs text-slate-400">Dates in PDF and Excel reports use DD-MM-YYYY.</p>
     </div>
 
     {isAdmin && <div className="rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm sm:p-6">
