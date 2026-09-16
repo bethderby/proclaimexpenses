@@ -26,8 +26,12 @@ export async function GET(req: NextRequest) {
 
   const now = new Date();
   const local = getLocalParts(now, schedule.timezone || 'Europe/London');
-  if (local.day !== schedule.dayOfMonth || local.hour !== schedule.hour) {
-    return NextResponse.json({ ok: true, skipped: true, reason: 'Not scheduled time.' });
+  // Vercel Hobby cron jobs can run at most once per day. The cron is therefore
+  // scheduled daily at 06:00 UTC, and the saved schedule controls the day of
+  // month. The saved hour is retained for display/future plans but is not used
+  // as a second cron trigger on Hobby.
+  if (local.day !== schedule.dayOfMonth) {
+    return NextResponse.json({ ok: true, skipped: true, reason: 'Not scheduled day.' });
   }
   if (schedule.lastSentAt) {
     const last = getLocalParts(schedule.lastSentAt, schedule.timezone || 'Europe/London');

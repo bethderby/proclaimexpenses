@@ -702,9 +702,8 @@ export async function saveReportSchedule(formData: FormData) {
   if (!user.isAdmin) throw new Error('Only admins can change report settings.');
   const enabled = String(formData.get('enabled') || '') === 'true';
   const dayOfMonth = Number(formData.get('dayOfMonth'));
-  const hour = Number(formData.get('hour'));
+  const hour = 6;
   if (!Number.isInteger(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 28) throw new Error('Choose a day from 1 to 28.');
-  if (!Number.isInteger(hour) || hour < 0 || hour > 23) throw new Error('Choose a valid send time.');
   const recipients = parseReportRecipients(String(formData.get('recipients') || ''));
   for (const email of recipients) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error(`Invalid recipient email: ${email}`);

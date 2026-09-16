@@ -1,13 +1,13 @@
 import FormButton from './FormButton';
 import { saveReportSchedule } from '@/app/actions';
 
-export default function ReportSchedule({ enabled, dayOfMonth, hour, recipients }: { enabled: boolean; dayOfMonth: number; hour: number; recipients: string[] }) {
+export default function ReportSchedule({ enabled, dayOfMonth, recipients }: { enabled: boolean; dayOfMonth: number; recipients: string[] }) {
   const recipientText = recipients.join('\n');
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="flex flex-col gap-1">
         <p className="font-semibold text-slate-950">Automatic report schedule</p>
-        <p className="text-sm text-slate-500">Choose when the monthly Expense Report is sent and who receives it.</p>
+        <p className="text-sm text-slate-500">Choose which day the monthly Expense Report is sent and who receives it.</p>
       </div>
       <form action={saveReportSchedule} className="mt-5 space-y-5">
         <label className="flex items-center gap-3 text-sm font-medium text-slate-800">
@@ -20,11 +20,10 @@ export default function ReportSchedule({ enabled, dayOfMonth, hour, recipients }
               {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => <option key={day} value={day}>{day}</option>)}
             </select>
           </label>
-          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Time (UK)
-            <select name="hour" defaultValue={hour} className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
-              {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
-            </select>
-          </label>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Time (UK)
+            <div className="mt-1.5 flex min-h-[42px] items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium normal-case tracking-normal text-slate-700">06:00 daily check</div>
+            <p className="mt-1.5 text-xs font-normal normal-case tracking-normal text-slate-400">Automatic reports are checked once daily by Vercel. The selected day controls when the report is sent.</p>
+          </div>
         </div>
         <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Specific recipients (optional)
           <textarea name="recipients" defaultValue={recipientText} rows={4} placeholder="finance@example.com\ntrustee@example.com" className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-[#C99600]" />
