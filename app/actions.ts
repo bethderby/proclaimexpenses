@@ -276,6 +276,191 @@ export async function updateBankDetails(formData: FormData) {
   revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/payments');
 }
 
+export async function createWisePaymentRun() {
+  const user = await requireUser();
+  if (!user.isAdmin && !user.isApprover) throw new Error('Only approvers or admins can create payment runs.');
+  if (!isWiseConfigured()) throw new Error('Wise is not configured. Add WISE_API_TOKEN and WISE_PROFILE_ID first.');
+
+  const approverEmail = (user.email ?? '').toLowerCase();
+  const where: any = user.isAdmin
+    ? { paymentStatus: 'READY' }
+    : { paymentStatus: 'READY', team: { approverEmails: { has: approverEmail } } };
+
+  const expenses = await prisma.expense.findMany({
+    where,
+    include: { user: true },
+    orderBy: { submittedAt: 'asc' },
+  });
+  const eligible = expenses.filter(e => e.user.bankAccountName && e.user.bankSortCode && e.user.bankAccountNumber);
+  if (!eligible.length) throw new Error('No ready expenses with complete bank details are available.');
+
+  // This key is stable for the exact set of expenses being prepared. The
+  // unique DB index makes the Prepare action safe even when two requests hit
+  // the server at the same time (double-click, two browser tabs, etc.).
+  const preparationKey = crypto.createHash('sha256')
+    .update(eligible.map(e => e.id).sort().join('|'))
+    .digest('hex');
+
+  const reference = `PRO${new Date().toISOString().slice(2,10).replace(/-/g,'')}${crypto.randomUUID().replace(/-/g,'').slice(0,6).toUpperCase()}`;
+  validateWiseReference(reference);
+
+  let run: any;
+  try {
+    // Reserve the expenses and create the local PaymentRun BEFORE talking to
+    // Wise. The preparationKey is the server-side idempotency guard.
+    run = await prisma.$transaction(async tx => {
+      const fresh = await tx.expense.findMany({ where: { id: { in: eligible.map(e => e.id) }, paymentStatus: 'READY' }, select: { id: true } });
+      if (fresh.length !== eligible.length) {
+        throw new Error('One or more expenses were already included in another payment run. Refresh and try again.');
+      }
+      const createdRun = await tx.paymentRun.create({
+        data: {
+          reference,
+          preparationKey,
+          totalAmount: eligible.reduce((sum, e) => sum + e.amount, 0),
+          createdById: user.id,
+          status: 'DRAFT',
+        },
+      });
+      const reserved = await tx.expense.updateMany({
+        where: { id: { in: eligible.map(e => e.id) }, paymentStatus: 'READY' },
+        data: {
+          paymentRunId: createdRun.id,
+          paymentStatus: 'EXPORTED',
+          status: 'PAYMENT_PENDING',
+          paymentReference: reference,
+          wiseStatus: 'preparing',
+        },
+      });
+      if (reserved.count !== eligible.length) {
+        throw new Error('One or more expenses were already included in another payment run. Refresh and try again.');
+      }
+      return createdRun;
+    });
+  } catch (error: any) {
+    // A concurrent Prepare request for the same expenses loses the unique-key
+    // race. Do not create another Wise batch; the winning request owns it.
+    if (error?.code === 'P2002') {
+      const existing = await prisma.paymentRun.findUnique({ where: { preparationKey }, select: { reference: true, status: true } });
+      if (existing) {
+        throw new Error(`A payment run is already being prepared for these expenses (${existing.reference}, ${existing.status}). Use Sync Wise status on that run instead of preparing another run.`);
+      }
+    }
+    throw error;
+  }
+
+  let batchId: string | null = null;
+  let externalWorkStarted = false;
+
+  try {
+    const batch = await createWiseBatchGroup(`Proclaim Expenses ${reference}`);
+    externalWorkStarted = true;
+    batchId = String(batch.id);
+    await prisma.paymentRun.update({ where: { id: run.id }, data: { wiseBatchGroupId: batchId, wiseStatus: batch.status || 'NEW' } });
+    await prisma.expense.updateMany({ where: { paymentRunId: run.id }, data: { wiseBatchGroupId: batchId, wiseStatus: 'batch_created' } });
+
+    for (const expense of eligible) {
+      let recipientId = expense.wiseRecipientId ?? undefined;
+      if (!recipientId) {
+        const recipient = await createWiseRecipient({
+          name: decryptBankDetail(expense.user.bankAccountName!),
+          sortCode: decryptBankDetail(expense.user.bankSortCode!),
+          accountNumber: decryptBankDetail(expense.user.bankAccountNumber!),
+        });
+        recipientId = String(recipient.id);
+      }
+
+      await prisma.expense.update({ where: { id: expense.id }, data: { wiseRecipientId: recipientId, wiseStatus: 'recipient_created' } });
+
+      const recipientIdNumber = Number(recipientId);
+      if (!Number.isSafeInteger(recipientIdNumber)) throw new Error(`Invalid Wise recipient ID for expense ${expense.id}.`);
+      const quote = await createWiseQuote(recipientIdNumber, expense.amount);
+      const quoteUuid = quote.id || quote.uuid;
+      if (!quoteUuid) throw new Error(`Wise did not return a quote ID for expense ${expense.id}.`);
+
+      const details = getWiseTransferDetails(reference);
+      await getWiseTransferRequirements({ targetAccount: recipientIdNumber, quoteUuid: String(quoteUuid), details });
+
+      const customerTransactionId = deterministicWiseTransactionId(run.id, expense.id);
+      const transfer = await addWiseBatchTransfer(batchId, {
+        targetAccount: recipientIdNumber,
+        quoteUuid: String(quoteUuid),
+        details,
+        customerTransactionId,
+      });
+      const transferId = String(transfer.id);
+      if (!/^\d+$/.test(transferId)) throw new Error(`Wise did not return a transfer ID for expense ${expense.id}.`);
+
+      await prisma.expense.update({
+        where: { id: expense.id },
+        data: { wiseRecipientId: recipientId, wiseTransferId: transferId, wiseStatus: 'incoming_payment_waiting' },
+      });
+    }
+
+    const latestBatch = await getWiseBatchGroup(batchId);
+    const completedBatch = await completeWiseBatchGroup(batchId, Number(latestBatch.version));
+    await prisma.$transaction(async tx => {
+      await tx.paymentRun.update({ where: { id: run.id }, data: { wiseStatus: completedBatch.status || 'COMPLETED', status: 'WISE_PREPARED', exportedAt: new Date() } });
+      await tx.expense.updateMany({ where: { paymentRunId: run.id }, data: { wiseStatus: 'prepared' } });
+    });
+  } catch (error) {
+    console.error('Wise payment run preparation failed', error);
+
+    // If Wise has already created a batch/transfer, NEVER reset the expenses to
+    // READY and let the user prepare them again. That is how duplicate Wise
+    // payments can happen. Keep the local run attached to the external batch
+    // and require reconciliation/cancellation instead.
+    if (externalWorkStarted && batchId) {
+      let batchStatus = 'UNKNOWN';
+      try {
+        const currentBatch = await getWiseBatchGroup(batchId);
+        batchStatus = String(currentBatch.status || 'UNKNOWN');
+        if (['NEW'].includes(batchStatus)) {
+          await cancelWiseBatchGroup(batchId, Number(currentBatch.version));
+          const afterCancel = await getWiseBatchGroup(batchId);
+          batchStatus = String(afterCancel.status || batchStatus);
+        }
+      } catch (cleanupError) {
+        console.error('Wise batch cleanup failed; leaving run locked for reconciliation', cleanupError);
+      }
+
+      if (['CANCELLED'].includes(batchStatus)) {
+        await prisma.$transaction(async tx => {
+          await tx.paymentRun.update({ where: { id: run.id }, data: { status: 'CANCELLED', wiseStatus: 'cancelled', preparationKey: null } });
+          await tx.expense.updateMany({
+            where: { paymentRunId: run.id },
+            data: { paymentRunId: null, paymentStatus: 'READY', status: 'READY_TO_PAY', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null },
+          });
+        });
+      } else {
+        await prisma.$transaction(async tx => {
+          await tx.paymentRun.update({ where: { id: run.id }, data: { status: 'WISE_RECOVERY_REQUIRED', wiseStatus: `recovery_required:${batchStatus}` } });
+          await tx.expense.updateMany({ where: { paymentRunId: run.id }, data: { wiseStatus: `recovery_required:${batchStatus}` } });
+        });
+      }
+    } else {
+      // No Wise batch was created. It is safe to release the reservation so
+      // the user can retry without creating an orphaned external payment.
+      await prisma.$transaction(async tx => {
+        await tx.paymentRun.update({ where: { id: run.id }, data: { status: 'CANCELLED', wiseStatus: 'not_started', preparationKey: null } });
+        await tx.expense.updateMany({
+          where: { paymentRunId: run.id, purchaseStatus: 'NOT_PURCHASED' },
+          data: { paymentRunId: null, paymentStatus: 'READY', status: 'AWAITING_PURCHASE', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null },
+        });
+        await tx.expense.updateMany({
+          where: { paymentRunId: run.id, purchaseStatus: 'ALREADY_PURCHASED' },
+          data: { paymentRunId: null, paymentStatus: 'READY', status: 'READY_TO_PAY', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null },
+        });
+      });
+    }
+    throw error;
+  }
+
+  revalidatePath('/dashboard/payments');
+  revalidatePath('/dashboard/expenses');
+}
+
+
 export async function syncWisePaymentRun(formData: FormData) {
   const user = await requireUser();
   if (!user.isAdmin && !user.isApprover) throw new Error('Only approvers or admins can sync payment runs.');
