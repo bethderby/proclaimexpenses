@@ -7,7 +7,7 @@ import MarkPurchasedForm from './MarkPurchasedForm';
 import { cancelExpense } from '@/app/actions';
 
 const fmt=(n:number)=>`£${n.toFixed(2)}`;
-const fmtDate=(iso:string)=>new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+const fmtDate=(iso:string)=>new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
 const modeLabel=(status:string,timing:string)=>status==='ALREADY_PURCHASED'?'Already purchased':timing==='ADVANCE'?'Advance requested':'Pay personally then reimburse';
 
 export default function ExpenseRow({ expense, teams, variant }:{ expense:{id:string;date:string;description:string;amount:number;teamId:string;teamName:string;receiptUrl:string|null;status:string;purchaseStatus:string; paymentTiming:string; receiptDueAt:string|null;paymentStatus:string;settlementStatus:string;settlementNote:string|null}; teams:{id:string;name:string}[]; variant:'desktop'|'mobile' }){

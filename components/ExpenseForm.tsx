@@ -14,17 +14,28 @@ export default function ExpenseForm({ teams, hasBankDetails }: { teams: { id: st
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [showBankPrompt, setShowBankPrompt] = useState(false);
+  const MAX_FILE_SIZE = 4 * 1024 * 1024;
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return;
-    setError(''); setBusy(true);
+    setError('');
+    if (file.size > MAX_FILE_SIZE) {
+      setError('This file is too large. Please choose a receipt smaller than 4MB.');
+      e.target.value = '';
+      return;
+    }
+    setBusy(true);
     try {
       const fd = new FormData(); fd.append('file', file);
       const res = await fetch('/api/receipts/upload', { method: 'POST', body: fd });
-      const raw = await res.text(); let data:any={}; try { data = raw ? JSON.parse(raw) : {}; } catch { throw new Error('The upload server returned an invalid response.'); }
-      if (!res.ok) throw new Error(data.error || 'Upload failed.');
+      const raw = await res.text();
+      let data:any = {};
+      try { data = raw ? JSON.parse(raw) : {}; } catch {
+        throw new Error(res.status === 413 ? 'This file is too large. Please choose a receipt smaller than 4MB.' : 'We could not upload this receipt. Please try again.');
+      }
+      if (!res.ok) throw new Error(data.error || (res.status === 413 ? 'This file is too large. Please choose a receipt smaller than 4MB.' : 'We could not upload this receipt. Please try again.'));
       setReceiptUrl(data.url); setReceiptPreviewUrl(data.previewUrl || data.url); setReceiptType(data.contentType || file.type); setReceiptName(file.name);
-    } catch (err:any) { setError(err.message || 'Could not upload that file.'); } finally { setBusy(false); }
+    } catch (err:any) { setError(err.message || 'We could not upload this receipt. Please try again.'); } finally { setBusy(false); }
   }
 
   const alreadyBought = purchaseStatus === 'ALREADY_PURCHASED';

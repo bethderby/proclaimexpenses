@@ -5,7 +5,7 @@ import { issueSignedToken, presignUrl, put } from '@vercel/blob';
 
 export const runtime = 'nodejs';
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 4 * 1024 * 1024;
 const ALLOWED_TYPES = new Set([
   'image/jpeg',
   'image/png',
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Upload a JPG, PNG, WebP, HEIC, HEIF, or PDF receipt.' }, { status: 400 });
     }
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: 'Receipt is too large (max 10MB).' }, { status: 400 });
+      return NextResponse.json({ error: 'Receipt is too large (max 4MB).' }, { status: 400 });
     }
 
     const pathname = `receipts/${Date.now()}-${crypto.randomUUID()}${safeExtension(file.name, file.type)}`;
