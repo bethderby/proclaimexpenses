@@ -128,6 +128,18 @@ model PaymentRun {
   expenses    Expense[]
 }
 
+
+model ReportSchedule {
+  id          String   @id @default("default")
+  enabled     Boolean  @default(true)
+  dayOfMonth  Int      @default(1)
+  hour        Int      @default(6)
+  timezone    String   @default("Europe/London")
+  recipients  String[] @default([])
+  lastSentAt  DateTime?
+  updatedAt   DateTime @updatedAt
+}
+
 model Expense {
   id                 String        @id @default(cuid())
   date               DateTime
