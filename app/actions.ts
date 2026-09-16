@@ -142,41 +142,15 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
 
   await prisma.expense.update({ where: { id: expenseId }, data: { status: decision === 'REJECTED' ? 'REJECTED' : nextStatus, paymentStatus, approvedAmount: decision === 'APPROVED' ? expense.amount : null, decisionNote: note || null, decidedAt: new Date() } });
 
-  // Once an approval makes the expense payable, immediately prepare the
-  // current ready-to-pay set in Wise. This means the Wise batch is already
-  // waiting in Wise for funding/confirmation instead of requiring a separate
-  // manual "Prepare Wise payment run" step.
-  let wisePreparedAutomatically = false;
-  let wisePreparationError: string | null = null;
-  if (decision === 'APPROVED' && paymentStatus === 'READY' && isWiseConfigured()) {
-    try {
-      await createWisePaymentRun();
-      wisePreparedAutomatically = true;
-    } catch (error: any) {
-      // Approval must not be rolled back because Wise preparation failed.
-      // The expense remains READY and can be prepared manually from Payments.
-      wisePreparationError = error?.message || 'Wise payment preparation failed.';
-      console.error('Automatic Wise payment run preparation failed', { expenseId, error });
-    }
-  }
-
   if (expense.user.email) {
     const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
     const expensesUrl = `${appUrl}/dashboard/expenses`;
     const approved = decision === 'APPROVED';
     const extra = expense.purchaseStatus === 'NOT_PURCHASED' && expense.paymentTiming === 'ADVANCE' && approved
-      ? (wisePreparedAutomatically
-        ? 'Your advance has been approved and the payment batch has been prepared in Wise and is waiting there for funding/confirmation.'
-        : 'Your advance has been approved and is ready for a Wise payment run. If Wise preparation could not be completed automatically, it can be prepared from the Payments page.')
+      ? 'Because you requested an advance, this expense can now be included in a Wise payment run. After you buy the item, upload the receipt and enter the actual amount.'
       : expense.purchaseStatus === 'NOT_PURCHASED' && approved
         ? 'Once you buy the item, open this expense, mark it as purchased, upload the receipt and it will become ready for reimbursement.'
-        : approved
-          ? (wisePreparedAutomatically
-            ? 'Your reimbursement has been approved and the payment batch has been prepared in Wise and is waiting there for funding/confirmation.'
-            : wisePreparationError
-              ? 'Your reimbursement was approved, but the Wise batch could not be prepared automatically. It remains ready to pay and can be prepared from the Payments page.'
-              : 'It can now move to payment.')
-          : 'The approver did not approve this expense.';
+        : approved ? 'It can now move to payment.' : 'The approver did not approve this expense.';
     await notify(
       expense.user.email,
       `${approved ? 'Approved' : 'Declined'} expense - £${expense.amount.toFixed(2)}`,
