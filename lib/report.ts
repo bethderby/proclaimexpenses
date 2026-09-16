@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { buildStatementPdf } from '@/lib/pdf';
 
+import { formatUKDate } from '@/lib/date';
 export async function sendCombinedReport(start: Date, end: Date, opts: { manual?: boolean } = {}) {
   const expenses = await prisma.expense.findMany({
     where: { date: { gte: start, lt: end } },
@@ -21,9 +22,9 @@ export async function sendCombinedReport(start: Date, end: Date, opts: { manual?
   const result = await resend.emails.send({
     from,
     to: recipients,
-    subject: `Proclaim expense report — ${label}`,
+    subject: `Proclaim expense report - ${label}`,
     text: `Attached is the Proclaim expense report for ${label}, including all teams.`,
-    attachments: [{ filename: `proclaim-expenses-${start.toISOString().slice(0,10)}-to-${new Date(end.getTime()-1).toISOString().slice(0,10)}.pdf`, content: pdf.toString('base64') }],
+    attachments: [{ filename: `proclaim-expenses-${formatUKDate(start).slice(0,10)}-to-${new Date(end.getTime()-1).toISOString().slice(0,10)}.pdf`, content: pdf.toString('base64') }],
   });
   if (result.error) throw new Error(result.error.message || 'Resend could not send the email.');
   return { recipients, count: expenses.length, manual: !!opts.manual };

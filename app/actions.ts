@@ -80,7 +80,7 @@ export async function submitExpense(formData: FormData) {
 
   await notify(
     approverEmails,
-    `Expense needs approval — £${amount.toFixed(2)}`,
+    `Expense needs approval - £${amount.toFixed(2)}`,
     `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a"><h2>New expense needs approval</h2><p style="color:#64748b">${requester} submitted an expense for <strong>${escapeHtml(team.name)}</strong>.</p><div style="padding:18px;border:1px solid #e2e8f0;border-radius:14px;margin:20px 0"><p style="margin:0 0 8px;font-size:20px;font-weight:700">£${amount.toFixed(2)}</p><p style="margin:0;color:#475569">${escapeHtml(description)}</p><p style="margin:8px 0 0;color:#64748b">${escapeHtml(purchaseText)}</p></div>${approvalUrl ? `<a href="${approvalUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Review expense</a>` : ''}<p style="margin-top:28px;font-size:12px;color:#94a3b8">Proclaim Expenses</p></div>`,
     `${requester} submitted a £${amount.toFixed(2)} expense for ${team.name}.\n\n${description}\n\n${purchaseText}\n\n${approvalUrl || 'Open Proclaim Expenses to review it.'}`
   );
@@ -150,9 +150,9 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
         : approved ? 'It can now move to payment.' : 'The approver did not approve this expense.';
     await notify(
       expense.user.email,
-      `${approved ? 'Approved' : 'Declined'} expense — £${expense.amount.toFixed(2)}`,
+      `${approved ? 'Approved' : 'Declined'} expense - £${expense.amount.toFixed(2)}`,
       `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a"><h2>${approved ? 'Your expense was approved' : 'Your expense was declined'}</h2><p style="color:#64748b">${escapeHtml(extra)}</p><div style="padding:18px;border:1px solid #e2e8f0;border-radius:14px;margin:20px 0"><p style="margin:0 0 8px;font-size:20px;font-weight:700">£${expense.amount.toFixed(2)}</p><p style="margin:0">${escapeHtml(expense.description)}</p>${note ? `<p style="margin:14px 0 0;color:#475569"><strong>Note:</strong> ${escapeHtml(note)}</p>` : ''}</div>${expensesUrl ? `<a href="${expensesUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">View expense</a>` : ''}</div>`,
-      `${approved ? 'Approved' : 'Declined'} expense: £${expense.amount.toFixed(2)} — ${expense.description}.\n\n${extra}${note ? `\n\nNote: ${note}` : ''}`
+      `${approved ? 'Approved' : 'Declined'} expense: £${expense.amount.toFixed(2)} - ${expense.description}.\n\n${extra}${note ? `\n\nNote: ${note}` : ''}`
     );
   }
 

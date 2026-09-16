@@ -28,8 +28,8 @@ export const authOptions: NextAuthOptions = {
     // Removing a user keeps their User row (so history stays attached) but
     // used to also delete their linked Account row. On the next Google
     // sign-in, NextAuth then sees a Google identity with no Account link
-    // pointing at an existing User with the same email, and — as a security
-    // guard against silently merging unrelated accounts — refuses with
+    // pointing at an existing User with the same email, and - as a security
+    // guard against silently merging unrelated accounts - refuses with
     // OAuthAccountNotLinked instead of relinking. Google is our only
     // provider and its emails are verified, so it's safe to let NextAuth
     // relink automatically here.

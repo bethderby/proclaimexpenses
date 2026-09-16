@@ -6,7 +6,7 @@ import { Calendar } from 'lucide-react';
  * A date input styled to match the rest of the form.
  *
  * Mobile browsers (iOS Safari especially) render a filled `<input type="date">`
- * as a native, non-stylable control — its text ignores font-size entirely,
+ * as a native, non-stylable control - its text ignores font-size entirely,
  * which is why the date field can look much bigger than every other field.
  *
  * To fix this reliably we keep the real <input type="date"> (so the native

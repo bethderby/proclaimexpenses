@@ -9,11 +9,11 @@ There is one workflow: **Expenses**.
 A requester answers two simple questions:
 
 1. **Have you already bought this?**
-   - Yes — receipt required now.
-   - No — choose whether an advance is needed.
+   - Yes - receipt required now.
+   - No - choose whether an advance is needed.
 2. **Do you need the money before you can buy it?**
-   - Yes — an advance is paid after approval.
-   - No — the requester buys it personally and is reimbursed after the receipt is uploaded.
+   - Yes - an advance is paid after approval.
+   - No - the requester buys it personally and is reimbursed after the receipt is uploaded.
 
 For advances, the requester later enters the actual receipt amount. The app calculates whether money is due back to the charity or whether an additional reimbursement is required.
 
