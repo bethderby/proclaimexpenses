@@ -243,6 +243,17 @@ export async function markExpensePurchased(formData: FormData) {
       data: { purchasedAt: new Date(date), receiptUrl, actualAmount, receiptDueAt: null, lastReminderAt: null, status: 'PAID', settlementStatus, settlementNote },
     });
 
+    if (settlementStatus === 'SETTLED' && user.email) {
+      const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+      const expensesUrl = `${appUrl}/dashboard/expense-history`;
+      await notify(
+        user.email,
+        `Expense paid - £${actualAmount.toFixed(2)}`,
+        `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a"><h2>Your expense has been paid</h2><p style="color:#64748b">Your advance for <strong>${escapeHtml(expense.team.name)}</strong> exactly matched the receipt, so nothing further is owed either way.</p><div style="padding:18px;border:1px solid #e2e8f0;border-radius:14px;margin:20px 0"><p style="margin:0 0 8px;font-size:20px;font-weight:700">£${actualAmount.toFixed(2)}</p><p style="margin:0">${escapeHtml(expense.description)}</p></div>${expensesUrl ? `<a href="${expensesUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">View expense</a>` : ''}</div>`,
+        `Your expense "${expense.description}" (£${actualAmount.toFixed(2)}) has been paid - your advance exactly matched the receipt, so there's nothing further owed.\n\n${expensesUrl || ''}`
+      );
+    }
+
     // An extra reimbursement must be approved again. It is created as a
     // normal pending expense and linked to the original advance. Once an
     // approver approves it, decideExpense() automatically prepares the next
