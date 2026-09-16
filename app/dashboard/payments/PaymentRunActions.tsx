@@ -103,7 +103,7 @@ export function PaymentRunActions({
               onClick={() => runAction('sync')}
               disabled={busy !== null}
               aria-busy={busy === 'sync'}
-              className="rounded-xl bg-emerald-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl bg-[#C99600] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#A97900] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy === 'sync' ? 'Syncing…' : 'Sync Wise status'}
             </button>

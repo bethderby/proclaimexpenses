@@ -25,7 +25,7 @@ export default function ExportControls({ teams, isAdmin }: { teams:{id:string;na
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="flex flex-col gap-1 mb-5">
         <p className="font-semibold text-slate-950">Export report</p>
-        <p className="text-sm text-slate-500">Choose a team and date range, then select the format you want. Each expense belongs to the team selected on that expense.</p>
+        <p className="text-sm text-slate-500">Choose a team and date range, then select the format you want.</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Team
