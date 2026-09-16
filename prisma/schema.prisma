@@ -114,6 +114,7 @@ enum PaymentStatus {
 
 enum PaymentRunStatus {
   DRAFT
+  WISE_RECOVERY_REQUIRED
   WISE_PREPARED
   WISE_FUNDED
   COMPLETED
@@ -131,6 +132,7 @@ enum SettlementStatus {
 model PaymentRun {
   id          String          @id @default(cuid())
   reference   String          @unique
+  preparationKey String?      @unique
   wiseBatchGroupId String?
   wiseStatus String?
   status      PaymentRunStatus @default(DRAFT)
