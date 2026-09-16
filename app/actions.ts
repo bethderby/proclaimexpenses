@@ -246,10 +246,14 @@ export async function updateBankDetails(formData: FormData) {
   revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/payments');
 }
 
-function deterministicWiseTransactionId(expenseId: string) {
-  // UUIDv5-style deterministic value without adding another dependency.
-  // SHA-256 gives us stable idempotency while preserving UUID format.
-  const hash = crypto.createHash('sha256').update(`proclaim-expense:${expenseId}`).digest('hex');
+function deterministicWiseTransactionId(paymentRunId: string, expenseId: string) {
+  // Scope Wise idempotency to the payment run. A previous failed run may have
+  // already created a Wise transfer for the same expense; reusing an
+  // expense-only customerTransactionId can make Wise return that old transfer
+  // and then reject adding it to the new batch. The local payment-run lock
+  // prevents duplicate runs, while this run-scoped ID prevents cross-run
+  // collisions.
+  const hash = crypto.createHash('sha256').update(`proclaim-payment-run:${paymentRunId}:expense:${expenseId}`).digest('hex');
   return `${hash.slice(0,8)}-${hash.slice(8,12)}-5${hash.slice(13,16)}-${((parseInt(hash.slice(16,18), 16) & 0x3f) | 0x80).toString(16).padStart(2,'0')}${hash.slice(18,20)}-${hash.slice(20,32)}`;
 }
 
@@ -357,7 +361,7 @@ export async function createWisePaymentRun() {
       const details = getWiseTransferDetails(reference);
       await getWiseTransferRequirements({ targetAccount: recipientIdNumber, quoteUuid: String(quoteUuid), details });
 
-      const customerTransactionId = deterministicWiseTransactionId(expense.id);
+      const customerTransactionId = deterministicWiseTransactionId(run.id, expense.id);
       const transfer = await addWiseBatchTransfer(batchId, {
         targetAccount: recipientIdNumber,
         quoteUuid: String(quoteUuid),
@@ -455,7 +459,7 @@ export async function syncWisePaymentRun(formData: FormData) {
   const recovered = new Map<string, any>();
   for (const transfer of batchTransfers) {
     const customerTransactionId = String(transfer.customerTransactionId || '');
-    const expense = run.expenses.find(e => deterministicWiseTransactionId(e.id) === customerTransactionId);
+    const expense = run.expenses.find(e => deterministicWiseTransactionId(run.id, e.id) === customerTransactionId);
     if (expense) recovered.set(expense.id, transfer);
   }
 
