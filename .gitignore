@@ -8,9 +8,6 @@ public/uploads/
 *.log
 
 .vercel/
-.DS_Store.env.production.local
-.env*.local
-.DS_Store
 .DS_Store
 **/.DS_Store
 tsconfig.tsbuildinfo
