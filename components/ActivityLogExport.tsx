@@ -15,10 +15,6 @@ export default function ActivityLogExport() {
   }, [start, end]);
 
   return <div className="panel p-5 sm:p-6">
-    <div className="mb-5">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Export</p>
-      <h2 className="mt-1 text-lg font-semibold text-slate-950">Activity log</h2>
-    </div>
     <div className="grid gap-3 sm:grid-cols-2">
       <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">From</p><div className="mt-1.5"><DateField value={start} onChange={setStart} reportFormat /></div></div>
       <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">To</p><div className="mt-1.5"><DateField value={end} onChange={setEnd} reportFormat /></div></div>
