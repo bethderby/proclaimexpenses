@@ -8,7 +8,12 @@ import FormButton from './FormButton';
 export default function ExportControls({ teams, isAdmin }: { teams:{id:string;name:string}[]; isAdmin:boolean }) {
   const today = new Date();
   const first = new Date(today.getFullYear(), today.getMonth(), 1);
-  const iso = (d:Date) => d.toISOString().slice(0,10);
+  const iso = (d:Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
   const [teamId, setTeamId] = useState('');
   const [start, setStart] = useState(iso(first));
   const [end, setEnd] = useState(iso(today));
