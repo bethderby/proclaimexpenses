@@ -1,34 +1,28 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
 import { useFormStatus } from 'react-dom';
+import { Loader2 } from 'lucide-react';
 
 export default function SubmitExpenseButton({ busy, disabled: externallyDisabled }: { busy?: boolean; disabled?: boolean }) {
   const { pending } = useFormStatus();
-  const [pressed, setPressed] = useState(false);
   const disabled = pending || busy || !!externallyDisabled;
   const receiptRequired = !!externallyDisabled && !pending && !busy;
-
-  useEffect(() => {
-    if (!pending && !busy && pressed) {
-      const timer = window.setTimeout(() => setPressed(false), 500);
-      return () => window.clearTimeout(timer);
-    }
-  }, [pending, busy, pressed]);
-
-  const active = disabled || pressed;
-  const showSpinner = pending || busy || (pressed && !receiptRequired);
+  const submitting = pending || busy;
 
   return (
     <button
       type="submit"
       disabled={disabled}
-      aria-busy={showSpinner}
-      onClick={() => setPressed(true)}
-      className={`action-button w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 disabled:opacity-100 ${active ? 'action-button-pressed' : ''}`}
+      aria-busy={submitting}
+      className={`action-button w-full rounded-xl px-4 py-3 text-sm font-semibold transition ${
+        receiptRequired
+          ? 'cursor-not-allowed bg-slate-200 text-slate-500 opacity-100'
+          : submitting
+            ? 'cursor-not-allowed bg-slate-950 text-white opacity-100'
+            : 'bg-slate-950 text-white hover:bg-slate-800'
+      }`}
     >
-      {showSpinner && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
-      {pending ? 'Submitting…' : busy ? 'Uploading receipt…' : receiptRequired ? 'Add receipt to submit' : pressed ? 'Submitting…' : 'Submit expense'}
+      {submitting && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
+      {pending ? 'Submitting…' : busy ? 'Uploading receipt…' : receiptRequired ? 'Add receipt to submit' : 'Submit expense'}
     </button>
   );
 }
