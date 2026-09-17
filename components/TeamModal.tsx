@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Plus, Trash2, X } from 'lucide-react';
-import { createTeam, updateTeam } from '@/app/actions';
+import { createTeam, updateTeam } from '@/app/actions/teams';
 import FormButton from './FormButton';
 
 type Team = { id:string; name:string; budgetTarget:number; approvers:{id:string;name:string|null;email:string}[] };

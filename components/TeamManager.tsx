@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
-import { deleteTeam } from '@/app/actions';
+import { deleteTeam } from '@/app/actions/teams';
 import TeamModal from './TeamModal';
 import FormButton from './FormButton';
 

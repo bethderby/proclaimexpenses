@@ -1,6 +1,6 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { markExpensePurchased } from '@/app/actions';
+import { markExpensePurchased } from '@/app/actions/expenses';
 import { errorMessage } from '@/lib/money';
 import { Upload, Trash2 } from 'lucide-react';
 import DateField from './DateField';

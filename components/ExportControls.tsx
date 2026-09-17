@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { FileSpreadsheet, FileDown, Mail } from 'lucide-react';
-import { sendReportNow } from '@/app/actions';
+import { sendReportNow } from '@/app/actions/reports';
 import DateField from './DateField';
 import FormButton from './FormButton';
 

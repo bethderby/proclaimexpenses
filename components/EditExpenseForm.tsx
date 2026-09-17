@@ -1,6 +1,6 @@
 'use client';
 import { useTransition } from 'react';
-import { updateExpense } from '@/app/actions';
+import { updateExpense } from '@/app/actions/expenses';
 import { errorMessage } from '@/lib/money';
 import DateField from './DateField';
 

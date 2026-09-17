@@ -1,5 +1,5 @@
 import FormButton from './FormButton';
-import { saveReportSchedule } from '@/app/actions';
+import { saveReportSchedule } from '@/app/actions/reports';
 
 export default function ReportSchedule({ enabled, dayOfMonth, recipients }: { enabled: boolean; dayOfMonth: number; recipients: string[] }) {
   const recipientText = recipients.join('\n');

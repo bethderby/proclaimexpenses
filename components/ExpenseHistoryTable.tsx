@@ -4,7 +4,7 @@ import { Eye, ReceiptText, Pencil, XCircle } from 'lucide-react';
 import StatusPill from './StatusPill';
 import EditExpenseForm from './EditExpenseForm';
 import MarkPurchasedForm from './MarkPurchasedForm';
-import { cancelExpense } from '@/app/actions';
+import { cancelExpense } from '@/app/actions/expenses';
 
 const fmt=(n:number)=>`£${n.toFixed(2)}`;
 const fmtDate=(value:string)=>new Date(value).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});

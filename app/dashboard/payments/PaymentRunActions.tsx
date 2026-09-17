@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { cancelPaymentRun, syncWisePaymentRun } from '@/app/actions';
+import { cancelPaymentRun, syncWisePaymentRun } from '@/app/actions/payments';
 
 function friendlyError(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -19,7 +19,7 @@ export function PrepareWiseButton({ disabled }: { disabled: boolean }) {
     setBusy(true);
     setError('');
     try {
-      const { createWisePaymentRun } = await import('@/app/actions');
+      const { createWisePaymentRun } = await import('@/app/actions/payments');
       await createWisePaymentRun();
       router.refresh();
     } catch (error) {

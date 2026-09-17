@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { AlertCircle, CheckCircle2, Trash2, Upload, X } from 'lucide-react';
-import { submitExpense } from '@/app/actions';
+import { submitExpense } from '@/app/actions/expenses';
 import { errorMessage } from '@/lib/money';
 import DateField from './DateField';
 import SubmitExpenseButton from './SubmitExpenseButton';

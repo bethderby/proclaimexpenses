@@ -6,7 +6,7 @@ import TeamManager from '@/components/TeamManager';
 import { Shield } from 'lucide-react';
 import FormButton from '@/components/FormButton';
 import RemoveUserButton from '@/components/RemoveUserButton';
-import { setAdminStatus } from '@/app/actions';
+import { setAdminStatus } from '@/app/actions/admin';
 
 export default async function TeamsPage(){
  const session=await getServerSession(authOptions); if(!session?.user)redirect('/login'); const user=session.user; if(!user.isAdmin)redirect('/dashboard');

@@ -1,6 +1,6 @@
 'use client';
 import { UserMinus } from 'lucide-react';
-import { removeUser } from '@/app/actions';
+import { removeUser } from '@/app/actions/admin';
 import FormButton from './FormButton';
 
 export default function RemoveUserButton({ email, name }: { email: string; name: string }) {

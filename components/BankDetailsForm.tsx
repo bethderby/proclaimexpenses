@@ -1,7 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { updateBankDetails } from '@/app/actions';
+import { updateBankDetails } from '@/app/actions/expenses';
 import { errorMessage } from '@/lib/money';
 
 export default function BankDetailsForm({ initial }: { initial: { accountName:string; sortCode:string; accountNumber:string } }) {

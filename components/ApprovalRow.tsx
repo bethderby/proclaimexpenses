@@ -1,7 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { CheckCircle2, XCircle, ReceiptText, WalletCards } from 'lucide-react';
-import { decideExpense } from '@/app/actions';
+import { decideExpense } from '@/app/actions/expenses';
 import StatusPill from './StatusPill';
 
 const fmt=(n:number)=>`£${n.toFixed(2)}`;
