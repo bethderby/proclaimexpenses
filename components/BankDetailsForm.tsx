@@ -15,7 +15,7 @@ export default function BankDetailsForm({ initial }: { initial: { accountName:st
        <div><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Account number</p><p className="mt-1 text-sm font-semibold text-slate-900">••••{initial.accountNumber.slice(-4)}</p></div>
      </div>
    </div>
-   {saved && <p className="text-sm font-medium text-[#146650]">Payment details saved.</p>}
+   {saved && <p className="text-sm font-medium text-[#C99600]">Payment details saved.</p>}
    <button type="button" onClick={()=>setEditing(true)} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">Edit payment details</button>
  </div>;
  return <form action={fd=>startTransition(async()=>{setError('');setSaved(false);try{await updateBankDetails(fd);setSaved(true);setEditing(false);router.refresh()}catch(e:any){setError(e?.message||'Could not save bank details.')}})} className="space-y-4">

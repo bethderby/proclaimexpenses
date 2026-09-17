@@ -18,11 +18,11 @@ export default function ExpenseRow({ expense, teams, variant }:{ expense:{id:str
  const canEdit = expense.status==='PENDING';
  const canCancel = expense.status==='PENDING'||expense.status==='AWAITING_PURCHASE';
  const hasActions = needsPurchaseAction || canEdit || canCancel;
- const settlementTone = expense.settlementStatus==='BALANCE_TO_RETURN' ? 'bg-amber-50 text-amber-800 border border-amber-200' : expense.settlementStatus==='ADDITIONAL_REIMBURSEMENT_REQUIRED' ? 'bg-[#EAF6F1] text-[#0F5240] border border-[#A7D9C6]' : '';
+ const settlementTone = expense.settlementStatus==='BALANCE_TO_RETURN' ? 'bg-amber-50 text-amber-800 border border-amber-200' : expense.settlementStatus==='ADDITIONAL_REIMBURSEMENT_REQUIRED' ? 'bg-[#FFF8E1] text-[#A97900] border border-[#F3D36A]' : '';
 
  const badges=<div className="inline-flex flex-wrap items-center gap-1.5">
    <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">{modeLabel(expense.purchaseStatus, expense.paymentTiming)}</span>
-   {expense.receiptUrl && <span className="rounded-full bg-[#EAF6F1] px-2 py-0.5 text-[11px] font-medium text-[#146650]">Receipt attached</span>}
+   {expense.receiptUrl && <span className="rounded-full bg-[#FFF8E1] px-2 py-0.5 text-[11px] font-medium text-[#C99600]">Receipt attached</span>}
    {needsPurchaseAction && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">Receipt after purchase</span>}
  </div>;
 
