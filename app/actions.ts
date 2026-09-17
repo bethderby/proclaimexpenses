@@ -598,10 +598,15 @@ export async function createWisePaymentRun() {
 }
 
 async function autoCompleteWiseBatchIfApprovalsAreComplete(userId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, isAdmin: true, isApprover: true, email: true } });
-  if (!user || (!user.isAdmin && !user.isApprover) || !isWiseConfigured()) return false;
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, isAdmin: true, email: true } });
+  if (!user || !isWiseConfigured()) return false;
 
   const approverEmail = (user.email ?? '').toLowerCase();
+  const approverTeamCount = user.isAdmin || !approverEmail
+    ? 0
+    : await prisma.team.count({ where: { approverEmails: { has: approverEmail } } });
+  const isApprover = user.isAdmin || approverTeamCount > 0;
+  if (!isApprover) return false;
   const pendingWhere: any = user.isAdmin
     ? { status: 'PENDING' }
     : { status: 'PENDING', team: { approverEmails: { has: approverEmail } } };
