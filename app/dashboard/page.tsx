@@ -61,7 +61,7 @@ export default async function DashboardPage(){
 
   <section className="metric-grid" aria-label="Expense summary">
     <MetricCard label="My expenses" value={expenseCount} note={`${fmt(total)} across all expenses`} icon={ReceiptText} tone="gold" href="/dashboard/expense-history" />
-    <MetricCard label="Waiting for approval" value={pending} note="Expenses not yet approved" icon={Clock3} tone="blue" href="/dashboard/approvals" />
+    <MetricCard label="Waiting for approval" value={pending} note="Expenses not yet approved" icon={Clock3} tone="blue" href={user.isAdmin||user.isApprover?"/dashboard/approvals":"/dashboard/expense-history?status=PENDING"} />
     <MetricCard label="Receipt needed" value={needsReceipt} note="Advances awaiting receipt" icon={CheckCircle2} tone="green" href="/dashboard/expense-history" />
     {(user.isAdmin||user.isApprover)&&<MetricCard label="Ready to pay" value={ready} note="Ready for payment runs" icon={CreditCard} tone="purple" href="/dashboard/payments" />}
   </section>
@@ -72,15 +72,11 @@ export default async function DashboardPage(){
       <Link href="/dashboard/expense-history" className="panel-link">View all <ArrowUpRight size={14}/></Link>
     </div>
     <div className="divide-y divide-slate-100">
-      {expenses.length===0?<div className="empty-state m-4">No expenses yet.</div>:expenses.map(e=><div key={e.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-3.5">
+      {expenses.length===0?<div className="empty-state m-4">No expenses yet.</div>:expenses.map(e=><div key={e.id} className="expense-summary-row">
         <div className="expense-summary-icon"><ReceiptText size={17}/></div>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-slate-900 sm:text-[15px]">{e.description}</p>
-          <p className="mt-0.5 text-xs font-medium text-slate-500">{fmt(e.amount)}</p>
-        </div>
-        <div className="shrink-0">
-          <StatusPill status={e.status}/>
-        </div>
+        <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-900">{e.description}</p><p className="mt-0.5 text-xs font-medium text-slate-500 md:hidden">{fmt(e.amount)}</p></div>
+        <span className="hidden shrink-0 text-sm font-bold text-slate-900 md:block">{fmt(e.amount)}</span>
+        <StatusPill status={e.status}/>
       </div>)}
     </div>
   </section>

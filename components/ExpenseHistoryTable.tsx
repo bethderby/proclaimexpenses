@@ -29,17 +29,18 @@ export default function ExpenseHistoryTable({expenses,teams}:{expenses:Expense[]
  },[selected]);
  return <>
   <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-   <div className="hidden md:grid grid-cols-[130px_minmax(0,1fr)_130px_max-content_80px] gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500"><span>Date</span><span>Expense</span><span className="text-right">Amount</span><span>Status</span><span className="text-right">Details</span></div>
-   {expenses.map(e=><button key={e.id} type="button" onClick={()=>{setSelected(e);setEditing(false)}} className="group grid w-full grid-cols-[78px_minmax(0,1fr)_70px_24px] items-start gap-2 border-b border-slate-100 px-3 py-2.5 text-left last:border-0 hover:bg-slate-50 md:grid-cols-[130px_minmax(0,1fr)_130px_max-content_80px] md:items-center md:gap-4 md:px-5 md:py-3">
+   <div className="hidden md:grid grid-cols-[130px_minmax(0,1fr)_220px_max-content_70px] gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500"><span>Date</span><span>Expense</span><span className="text-right">Amount</span><span>Status</span><span className="text-right">Details</span></div>
+   {expenses.map(e=><button key={e.id} type="button" onClick={()=>{setSelected(e);setEditing(false)}} className="group grid w-full grid-cols-[78px_minmax(0,1fr)_70px_24px] items-start gap-2 border-b border-slate-100 px-3 py-2.5 text-left last:border-0 hover:bg-slate-50 md:grid-cols-[130px_minmax(0,1fr)_220px_max-content_70px] md:items-center md:gap-4 md:px-5 md:py-3">
     <span className="row-span-2 pt-0.5 text-xs text-slate-500 md:row-span-1 md:pt-0 md:text-sm">{fmtDate(e.date)}</span>
     <span className="min-w-0">
       <span className="block truncate text-sm font-semibold leading-5 text-slate-950">{e.description}</span>
       <span className="mt-0.5 hidden truncate text-xs text-slate-500 md:block">{modeLabel(e.purchaseStatus,e.paymentTiming)}</span>
+      {e.receiptUrl&&<span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-[#C99600] md:hidden"><Paperclip size={12}/> Receipt</span>}
       <span className="mt-1 flex items-center gap-2 md:hidden"><StatusPill status={e.status}/></span>
     </span>
-    <span className="flex flex-col items-end gap-1 text-right text-sm font-bold leading-5 text-slate-950 md:text-base">
+    <span className="flex items-center justify-end gap-4 text-right text-sm font-bold leading-5 text-slate-950 md:text-base">
       <span>{fmt(e.amount)}</span>
-      {e.receiptUrl&&<span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#C99600]"><Paperclip size={12}/> Receipt</span>}
+      {e.receiptUrl&&<span className="hidden items-center gap-1 whitespace-nowrap text-[11px] font-medium text-[#C99600] md:inline-flex md:text-xs"><Paperclip size={12}/> Receipt</span>}
     </span>
     <span className="flex justify-end pt-0.5 text-slate-400 group-hover:text-[#C99600] md:hidden"><Eye size={17}/></span>
     <span className="hidden whitespace-nowrap md:block"><StatusPill status={e.status}/></span>
