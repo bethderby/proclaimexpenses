@@ -585,6 +585,55 @@ async function addExpensesToOpenWiseBatch(expenseIds: string[], userId: string) 
   }
 }
 
+export async function resetExpenseToPending(formData: FormData) {
+  const user = await requireUser();
+  const expenseId = String(formData.get('expenseId') || '');
+  if (!expenseId) throw new Error('Expense not found.');
+
+  const expense = await prisma.expense.findUnique({ where: { id: expenseId }, include: { team: true, user: true } });
+  if (!expense) throw new Error('Expense not found.');
+
+  const email = (user.email ?? '').toLowerCase();
+  const isTeamApprover = !!email && expense.team.approverEmails.some((approver) => approver.toLowerCase() === email);
+  if (!user.isAdmin && !isTeamApprover) throw new Error("Only this team's configured approver or an admin can return this expense for approval.");
+  if (expense.status !== 'READY_TO_PAY') throw new Error('Only an approved expense that is ready to pay can be returned for approval.');
+  if (expense.paymentRunId || expense.wiseTransferId || expense.wiseBatchGroupId) {
+    throw new Error('This expense is already in a Wise payment run. Cancel that run first, then return the expense for approval.');
+  }
+
+  await prisma.expense.update({
+    where: { id: expense.id },
+    data: {
+      status: 'PENDING',
+      paymentStatus: 'NOT_READY',
+      approvedAmount: null,
+      decisionNote: 'Previous approval was returned for approval again.',
+      decidedAt: null,
+      paymentReference: null,
+      paidAt: null,
+      wiseStatus: null,
+    },
+  });
+
+  const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+  const approvalUrl = `${appUrl}/dashboard/approvals`;
+  const approverEmails = [...new Set(expense.team.approverEmails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
+  if (approverEmails.length) {
+    await notify(
+      approverEmails,
+      `Expense returned for approval - £${expense.amount.toFixed(2)}`,
+      `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a"><h2>Expense needs approval again</h2><p style="color:#64748b">An approved expense was returned to <strong>Pending</strong> and needs to be reviewed again.</p><div style="padding:18px;border:1px solid #e2e8f0;border-radius:14px;margin:20px 0"><p style="margin:0 0 8px;font-size:20px;font-weight:700">£${expense.amount.toFixed(2)}</p><p style="margin:0">${escapeHtml(expense.description)}</p><p style="margin:8px 0 0;color:#64748b">${escapeHtml(expense.user.name || expense.user.email || 'Requester')} · ${escapeHtml(expense.team.name)}</p></div>${approvalUrl ? `<a href="${approvalUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Review expense</a>` : ''}</div>`,
+      `The expense "${expense.description}" (£${expense.amount.toFixed(2)}) for ${expense.user.name || expense.user.email || 'the requester'} has been returned to Pending and needs approval again.\n\n${approvalUrl || 'Open Proclaim Expenses to review it.'}`
+    );
+  }
+
+  revalidatePath('/dashboard/approvals');
+  revalidatePath('/dashboard/payments');
+  revalidatePath('/dashboard/expenses');
+  revalidatePath('/dashboard/expense-history');
+  revalidatePath('/dashboard');
+}
+
 export async function createWisePaymentRun() {
   const user = await requireUser();
   if (!user.isAdmin && !user.isApprover) throw new Error('Only approvers or admins can create payment runs.');
@@ -680,9 +729,16 @@ async function autoCompleteWiseBatchIfApprovalsAreComplete(userId: string) {
             wiseBatchGroupId: { not: null },
             expenses: { some: { team: { approverEmails: { has: approverEmail } } } },
           },
+      include: { expenses: { include: { team: true } } },
       orderBy: { createdAt: 'desc' },
     });
     if (!run?.wiseBatchGroupId) return false;
+    if (!user.isAdmin) {
+      const canControlEveryExpense = run.expenses.length > 0 && run.expenses.every((expense) =>
+        expense.team.approverEmails.some((approver) => approver.toLowerCase() === approverEmail)
+      );
+      if (!canControlEveryExpense) return false;
+    }
 
     const batch = await getWiseBatchGroup(run.wiseBatchGroupId);
     const batchStatus = String(batch.status || '').toUpperCase();
@@ -741,7 +797,7 @@ export async function completeWisePaymentRun(formData: FormData) {
     if (run.status !== 'WISE_OPEN' || !run.wiseBatchGroupId) throw new Error('This payment batch is not open for review.');
     if (!user.isAdmin) {
       const email = (user.email ?? '').toLowerCase();
-      const allowed = run.expenses.some(e => e.team.approverEmails.some(a => a.toLowerCase() === email));
+      const allowed = run.expenses.length > 0 && run.expenses.every(e => e.team.approverEmails.some(a => a.toLowerCase() === email));
       if (!allowed) throw new Error('You are not authorised to close this payment batch.');
     }
 
@@ -807,6 +863,13 @@ export async function syncWisePaymentRun(formData: FormData) {
   if (!user.isAdmin && !user.isApprover) throw new Error('Only approvers or admins can sync payment runs.');
   const runId = String(formData.get('runId') || '');
   if (!runId) throw new Error('Payment run not found.');
+  const run = await prisma.paymentRun.findUnique({ where: { id: runId }, include: { expenses: { include: { team: true } } } });
+  if (!run) throw new Error('Payment run not found.');
+  if (!user.isAdmin) {
+    const email = (user.email ?? '').toLowerCase();
+    const allowed = run.expenses.some((e) => e.team.approverEmails.some((a) => a.toLowerCase() === email));
+    if (!allowed) throw new Error('You are not authorised to sync this payment batch.');
+  }
   await syncWisePaymentRunById(runId);
   revalidatePath('/dashboard/payments'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard');
 }
@@ -815,8 +878,13 @@ export async function cancelPaymentRun(formData: FormData) {
   const user = await requireUser();
   if (!user.isAdmin && !user.isApprover) throw new Error('Only approvers or admins can cancel payment runs.');
   const runId = String(formData.get('runId') || '');
-  const run = await prisma.paymentRun.findUnique({ where: { id: runId }, include: { expenses: true } });
+  const run = await prisma.paymentRun.findUnique({ where: { id: runId }, include: { expenses: { include: { team: true } } } });
   if (!run) throw new Error('Payment run not found.');
+  if (!user.isAdmin) {
+    const email = (user.email ?? '').toLowerCase();
+    const allowed = run.expenses.length > 0 && run.expenses.every((e) => e.team.approverEmails.some((a) => a.toLowerCase() === email));
+    if (!allowed) throw new Error('You are not authorised to cancel this payment batch.');
+  }
   if (run.status === 'COMPLETED') throw new Error('A completed payment run cannot be cancelled.');
 
   const batchLeaseToken = run.status === 'WISE_OPEN' ? await acquireWiseBatchLease() : null;
