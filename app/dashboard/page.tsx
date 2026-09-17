@@ -71,7 +71,7 @@ export default async function DashboardPage(){
       <div><p className="panel-kicker">Activity</p><h2 className="panel-title">Recent expenses</h2><p className="panel-subtitle">Your latest expense activity</p></div>
       <Link href="/dashboard/expense-history" className="panel-link">View all <ArrowUpRight size={14}/></Link>
     </div>
-    {expenses.length===0?<div className="empty-state m-4">No expenses yet.</div>:<div className="divide-y divide-slate-100 md:grid md:grid-cols-[2.5rem_minmax(0,1fr)_88px_minmax(170px,max-content)] md:items-stretch md:divide-y-0">
+    {expenses.length===0?<div className="empty-state m-4">No expenses yet.</div>:<div className="divide-y divide-slate-100 md:grid md:grid-cols-[4.5rem_minmax(0,1fr)_88px_minmax(170px,max-content)] md:items-stretch md:divide-y-0">
       {expenses.map((e,i)=>{const isLast=i===expenses.length-1;return <Link key={e.id} href={`/dashboard/expense-history?expenseId=${e.id}`} className={`expense-summary-row group md:contents`}>
         <div className={`flex items-center md:border-b md:border-slate-100 md:py-3 md:pl-5 md:pr-2 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}><div className="expense-summary-icon"><ReceiptText size={17}/></div></div>
         <div className={`min-w-0 flex-1 md:flex md:items-center md:border-b md:border-slate-100 md:px-2 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-900">{e.description}</p><p className="mt-0.5 text-xs font-medium text-slate-500 md:hidden">{fmt(e.amount)}</p></div></div>
