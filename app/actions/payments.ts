@@ -8,6 +8,7 @@ import { syncWisePaymentRunById } from '@/lib/wise-sync';
 import { recordAuditEvent } from '@/lib/audit';
 import { acquireWiseBatchLease, releaseWiseBatchLease, addExpensesToOpenWiseBatch, createWisePaymentRunForUser } from '@/lib/wise-batch';
 import { requireUser } from './shared';
+import { notify, renderEmail } from '@/lib/notify';
 
 export async function createWisePaymentRun() {
   const user = await requireUser();
@@ -30,7 +31,7 @@ export async function completeWisePaymentRun(formData: FormData) {
 
   const leaseToken = await acquireWiseBatchLease();
   try {
-    const run = await prisma.paymentRun.findUnique({ where: { id: runId }, include: { expenses: { include: { team: true } } } });
+    const run = await prisma.paymentRun.findUnique({ where: { id: runId }, include: { expenses: { include: { team: true, user: true } } } });
     if (!run) throw new Error('Payment run not found.');
     if (run.status !== 'WISE_OPEN' || !run.wiseBatchGroupId) throw new Error('This payment batch is not open for review.');
     if (!user.isAdmin) {
@@ -117,7 +118,7 @@ export async function cancelPaymentRun(formData: FormData) {
   const user = await requireUser();
   if (!user.isAdmin && !user.isApprover) throw new Error('Only approvers or admins can cancel payment runs.');
   const runId = String(formData.get('runId') || '');
-  const run = await prisma.paymentRun.findUnique({ where: { id: runId }, include: { expenses: { include: { team: true } } } });
+  const run = await prisma.paymentRun.findUnique({ where: { id: runId }, include: { expenses: { include: { team: true, user: true } } } });
   if (!run) throw new Error('Payment run not found.');
   if (!user.isAdmin) {
     const email = (user.email ?? '').toLowerCase();
@@ -181,5 +182,27 @@ export async function cancelPaymentRun(formData: FormData) {
     if (batchLeaseToken) await releaseWiseBatchLease(batchLeaseToken);
   }
   await recordAuditEvent({ actor: user, action: 'PAYMENT_RUN_CANCELLED', entityType: 'PAYMENT_RUN', entityId: runId, paymentRunId: runId, summary: 'Wise payment batch cancelled', metadata: { runId } });
+  const cancelledByEmail = new Map<string, typeof run.expenses>();
+  for (const expense of run.expenses) {
+    if (expense.paymentStatus !== 'PAID' && expense.status === 'PAYMENT_PENDING' && expense.user.email) {
+      const email = expense.user.email.trim().toLowerCase();
+      if (!email) continue;
+      const existing = cancelledByEmail.get(email) ?? [];
+      existing.push(expense);
+      cancelledByEmail.set(email, existing);
+    }
+  }
+  for (const [email, expenses] of cancelledByEmail) {
+    const details = expenses.map(e => `£${e.amount.toFixed(2)} - ${e.description}`).join('\n');
+    const { html, text } = renderEmail({
+      heading: 'Payment batch cancelled',
+      intro: 'Your payment batch was cancelled, so the affected expense(s) have been returned to Pending and must be approved again before they can be paid.',
+      plainTextExtra: `Expenses returned to approval:\n${details}`,
+      ctaPath: '/dashboard/expense-history',
+      ctaLabel: 'View expenses',
+    });
+    await notify(email, 'Payment batch cancelled - approval required again', html, text);
+  }
+
   revalidatePath('/dashboard/payments'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history');
 }

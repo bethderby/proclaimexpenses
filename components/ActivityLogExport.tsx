@@ -1,6 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { FileSpreadsheet, FileText } from 'lucide-react';
+import { FileSpreadsheet } from 'lucide-react';
 import DateField from './DateField';
 
 export default function ActivityLogExport() {
@@ -28,7 +28,6 @@ export default function ActivityLogExport() {
     </div>
       <div className="mt-5 flex flex-wrap gap-3">
         <a href={`${base}&format=xlsx`} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 active:scale-[.99]"><FileSpreadsheet size={16}/> Export log as XLSX</a>
-        <a href={`${base}&format=pdf`} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 active:scale-[.99]"><FileText size={16}/> Export log as PDF</a>
       </div>
     </div>
   </div>;

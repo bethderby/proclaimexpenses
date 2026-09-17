@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { parseMoney } from '@/lib/money';
-import { recordAuditEvent } from '@/lib/audit';
+import { auditEventData, recordAuditEvent } from '@/lib/audit';
 import { requireUser } from './shared';
 
 export async function updateBudget(teamId: string, target: number) {
@@ -50,9 +50,22 @@ export async function deleteTeam(formData: FormData) {
   if (!user.isAdmin) throw new Error('Only admins can delete teams.');
   if (!teamId) throw new Error('Team not found.');
   await prisma.$transaction(async tx => {
+    // Record the deletion before removing the team. The AuditEvent.teamId
+    // relation is ON DELETE SET NULL, so the audit record survives while its
+    // team link is cleared by PostgreSQL after the team is deleted.
+    await tx.auditEvent.create({
+      data: auditEventData({
+        actor: user,
+        action: 'TEAM_DELETED',
+        entityType: 'TEAM',
+        entityId: teamId,
+        teamId,
+        summary: 'Team deleted',
+        metadata: { teamId },
+      }),
+    });
     await tx.expense.deleteMany({ where: { teamId } });
     await tx.team.delete({ where: { id: teamId } });
   });
-  await recordAuditEvent({ actor: user, action: 'TEAM_DELETED', entityType: 'TEAM', entityId: teamId, teamId, summary: `Team deleted`, metadata: { teamId } });
   revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard/reports'); revalidatePath('/dashboard/approvals');
 }
