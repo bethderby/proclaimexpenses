@@ -11,3 +11,4 @@ public/uploads/
 .DS_Store.env.production.local
 .env*.local
 .DS_Store
+.DS_Store
