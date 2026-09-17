@@ -66,7 +66,7 @@ export function PaymentRunActions({
     if (!canAct || busy) return;
 
     if (kind === 'cancel' && !window.confirm(
-      'Cancel this payment run? Any unfunded Wise transfers that can be cancelled will be cancelled, and the expenses will be returned to Ready to pay.'
+      'Cancel this payment run? Any unfunded Wise transfers that can be cancelled will be cancelled, and the expenses will be returned to Pending and will need approval again.'
     )) {
       return;
     }

@@ -18,7 +18,7 @@ export async function sendCombinedReport(start: Date, end: Date, opts: { manual?
     include: { user: true, team: true },
     orderBy: { date: 'asc' },
   });
-  const items = expenses.map((e) => ({ date: formatReportDate(e.date), teamName: e.team.name, userName: e.user.name ?? e.user.email ?? '', description: e.description, settlementNote: e.settlementNote, amount: e.amount }));
+  const items = expenses.map((e) => ({ date: formatReportDate(e.date), teamName: e.team.name, userName: e.user.name ?? e.user.email ?? '', description: e.description, settlementNote: e.settlementNote, amount: Number(e.amount) }));
   const label = `${formatReportDate(start)} – ${formatReportDate(new Date(end.getTime() - 1))}`;
   const pdf = await buildStatementPdf('All teams', label, items);
   if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured.');

@@ -17,10 +17,10 @@ export default async function TeamsPage(){
   prisma.expense.findMany({where:{date:{gte:monthStart,lt:nextMonth}},select:{teamId:true,amount:true}}),
   prisma.expense.findMany({where:{status:'PENDING'},select:{teamId:true}})
  ]);
- const spend=new Map<string,number>(); expenses.forEach(e=>spend.set(e.teamId,(spend.get(e.teamId)||0)+e.amount));
+ const spend=new Map<string,number>(); expenses.forEach(e=>spend.set(e.teamId,(spend.get(e.teamId)||0)+Number(e.amount)));
  const pendingCount=new Map<string,number>(); pending.forEach(r=>pendingCount.set(r.teamId,(pendingCount.get(r.teamId)||0)+1));
  const userByEmail=new Map(users.filter(u=>u.email).map(u=>[u.email!.toLowerCase(),u]));
- const teamData=teams.map(t=>{ const approvers=t.approverEmails.map(email=>{const person=userByEmail.get(email.toLowerCase());return {id:person?.id||`approver-${email}`,name:person?.name||null,email};}); return {id:t.id,name:t.name,budgetTarget:t.budgetTarget,spent:spend.get(t.id)||0,pending:pendingCount.get(t.id)||0,approvers}; });
+ const teamData=teams.map(t=>{ const approvers=t.approverEmails.map(email=>{const person=userByEmail.get(email.toLowerCase());return {id:person?.id||`approver-${email}`,name:person?.name||null,email};}); return {id:t.id,name:t.name,budgetTarget:Number(t.budgetTarget),spent:spend.get(t.id)||0,pending:pendingCount.get(t.id)||0,approvers}; });
  return <div className="page-stack">
    <div className="page-header"><div><p className="page-eyebrow">Admin portal · {teams.length} teams</p><h1 className="page-title">Teams & people</h1><p className="page-description">Manage team budgets, approvers and access to the Proclaim Expenses web app.</p></div><TeamManager newButton /></div>
    <TeamManager teams={teamData}/>

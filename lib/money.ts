@@ -1,8 +1,8 @@
 /**
  * Parse a form value as pounds with at most two decimal places.
  * We deliberately round at the input boundary so every persisted monetary
- * value represents an exact number of pennies even though the legacy schema
- * currently uses PostgreSQL DOUBLE PRECISION.
+ * value represents an exact number of pennies before it is stored in PostgreSQL
+ * fixed-point DECIMAL columns.
  */
 export function parseMoney(value: unknown, options: { min?: number; allowZero?: boolean } = {}): number {
   const raw = String(value ?? '').trim();

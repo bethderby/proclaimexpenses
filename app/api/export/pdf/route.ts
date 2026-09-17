@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   let title='All teams';
   if(teamId){ const team=await prisma.team.findUnique({where:{id:teamId}}); if(!team)return NextResponse.json({error:'Team not found.'},{status:404}); where.teamId=teamId; title=team.name; }
   const expenses=await prisma.expense.findMany({where,include:{user:true,team:true},orderBy:{date:'asc'}});
-  const items=expenses.map(e=>({date:formatReportDate(e.date),teamName:e.team.name,userName:e.user.name??e.user.email??'',description:e.description,settlementNote:e.settlementNote,amount:e.amount}));
+  const items=expenses.map(e=>({date:formatReportDate(e.date),teamName:e.team.name,userName:e.user.name??e.user.email??'',description:e.description,settlementNote:e.settlementNote,amount:Number(e.amount)}));
   const label=`${formatReportDate(start)} – ${formatReportDate(end)}`;
   const buffer=await buildStatementPdf(title,label,items);
   return new NextResponse(new Uint8Array(buffer),{headers:{'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="${title} - Expense Report - ${formatReportDate(start)} to ${formatReportDate(end)}.pdf"`}});

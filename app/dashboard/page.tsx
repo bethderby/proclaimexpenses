@@ -48,7 +48,7 @@ export default async function DashboardPage(){
   prisma.expense.count({where:{userId:user.id,status:'ADVANCE_PAID_AWAITING_RECEIPT'}}),
   user.isAdmin||user.isApprover?prisma.expense.count({where:user.isAdmin?{status:'READY_TO_PAY'}:{status:'READY_TO_PAY',team:{approverEmails:{has:(user.email??'').toLowerCase()}}}}):Promise.resolve(0),
  ]);
- const total=expenseTotal._sum.amount??0;
+ const total=Number(expenseTotal._sum.amount??0);
  return <div className="page-stack dashboard-page">
   <header className="page-header dashboard-header">
     <div>
@@ -74,8 +74,8 @@ export default async function DashboardPage(){
     {expenses.length===0?<div className="empty-state m-4">No expenses yet.</div>:<div className="divide-y divide-slate-100 md:grid md:grid-cols-[4.5rem_minmax(0,1fr)_88px_minmax(170px,max-content)] md:items-stretch md:divide-y-0">
       {expenses.map((e,i)=>{const isLast=i===expenses.length-1;return <Link key={e.id} href={`/dashboard/expense-history?expenseId=${e.id}`} className={`expense-summary-row group md:contents`}>
         <div className={`flex items-center md:border-b md:border-slate-100 md:py-3 md:pl-5 md:pr-2 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}><div className="expense-summary-icon"><ReceiptText size={17}/></div></div>
-        <div className={`min-w-0 flex-1 md:flex md:items-center md:border-b md:border-slate-100 md:px-2 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-900">{e.description}</p><p className="mt-0.5 text-xs font-medium text-slate-500 md:hidden">{fmt(e.amount)}</p></div></div>
-        <div className={`hidden shrink-0 text-sm font-bold text-slate-900 md:flex md:items-center md:justify-end md:border-b md:border-slate-100 md:px-2 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}>{fmt(e.amount)}</div>
+        <div className={`min-w-0 flex-1 md:flex md:items-center md:border-b md:border-slate-100 md:px-2 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-900">{e.description}</p><p className="mt-0.5 text-xs font-medium text-slate-500 md:hidden">{fmt(Number(e.amount))}</p></div></div>
+        <div className={`hidden shrink-0 text-sm font-bold text-slate-900 md:flex md:items-center md:justify-end md:border-b md:border-slate-100 md:px-2 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}>{fmt(Number(e.amount))}</div>
         <div className={`flex items-center md:border-b md:border-slate-100 md:py-3 md:pl-2 md:pr-5 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}><StatusPill status={e.status}/></div>
       </Link>;})}
     </div>}

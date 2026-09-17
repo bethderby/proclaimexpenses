@@ -1,0 +1,4 @@
+Delete this obsolete file from the repository:
+app/dashboard/payments/ResetExpenseApprovalButton.tsx
+
+It is no longer imported or referenced. The Send back to approval button has been removed.

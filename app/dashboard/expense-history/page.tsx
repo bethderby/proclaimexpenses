@@ -11,7 +11,7 @@ import { STATUS_META } from '@/components/StatusPill';
 const isoFirstOfMonth=()=>{const now=new Date();return new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10)};
 const isoToday=()=>new Date().toISOString().slice(0,10);
 const fmt=(n:number)=>`£${n.toFixed(2)}`;
-const toRow=(e:any)=>({id:e.id,date:e.date.toISOString(),description:e.description,amount:e.amount,teamId:e.teamId,teamName:e.team.name,receiptUrl:e.receiptUrl,status:e.status,purchaseStatus:e.purchaseStatus,paymentTiming:e.paymentTiming,receiptDueAt:e.receiptDueAt?.toISOString()||null,paymentStatus:e.paymentStatus,settlementStatus:e.settlementStatus,settlementNote:e.settlementNote,submittedAt:e.submittedAt.toISOString(),approvedAmount:e.approvedAmount,actualAmount:e.actualAmount,decidedAt:e.decidedAt?.toISOString()||null,decisionNote:e.decisionNote,relatedExpenseId:e.relatedExpenseId});
+const toRow=(e:any)=>({id:e.id,date:e.date.toISOString(),description:e.description,amount:Number(e.amount),teamId:e.teamId,teamName:e.team.name,receiptUrl:e.receiptUrl,status:e.status,purchaseStatus:e.purchaseStatus,paymentTiming:e.paymentTiming,receiptDueAt:e.receiptDueAt?.toISOString()||null,paymentStatus:e.paymentStatus,settlementStatus:e.settlementStatus,settlementNote:e.settlementNote,submittedAt:e.submittedAt.toISOString(),approvedAmount:e.approvedAmount==null?null:Number(e.approvedAmount),actualAmount:e.actualAmount==null?null:Number(e.actualAmount),decidedAt:e.decidedAt?.toISOString()||null,decisionNote:e.decisionNote,relatedExpenseId:e.relatedExpenseId});
 
 export default async function ExpenseHistoryPage({searchParams}:{searchParams:{from?:string;to?:string;status?:string;expenseId?:string}}){
  const session=await getServerSession(authOptions);if(!session?.user)redirect('/login');const user=session.user;
@@ -29,7 +29,7 @@ export default async function ExpenseHistoryPage({searchParams}:{searchParams:{f
   prisma.expense.findMany({where:{userId:user.id,date:{gte:fromDate,lte:toDate},...(status?{status:status as any}:{})},include:{team:true},orderBy:[{date:'desc'},{submittedAt:'desc'},{id:'desc'}]}),
   expenseId?prisma.expense.findFirst({where:{id:expenseId,userId:user.id},include:{team:true}}):Promise.resolve(null),
  ]);
- const total=expenses.reduce((s,e)=>s+e.amount,0);
+ const total=expenses.reduce((s,e)=>s+Number(e.amount),0);
  const rows=expenses.map(toRow);
  const statusLabel=status?(STATUS_META[status]?.label||status):null;
  return <div className="page-stack">

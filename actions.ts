@@ -172,11 +172,11 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
   }
 
   if (expense.relatedExpenseId) {
-    const extraAmount = expense.amount;
+    const extraAmount = Number(expense.amount);
     const original = await prisma.expense.findUnique({ where: { id: expense.relatedExpenseId }, select: { id: true, advanceAmount: true, actualAmount: true } });
     if (original) {
-      const originalAdvance = original.advanceAmount ?? 0;
-      const originalActual = original.actualAmount ?? (originalAdvance + extraAmount);
+      const originalAdvance = Number(original.advanceAmount ?? 0);
+      const originalActual = Number(original.actualAmount ?? (originalAdvance + extraAmount));
       const originalNote = decision === 'APPROVED'
         ? (wisePreparedAutomatically
           ? `You were advanced £${originalAdvance.toFixed(2)} but the receipt shows £${originalActual.toFixed(2)}. The extra £${extraAmount.toFixed(2)} was approved and has been added to a Wise payment run.`
@@ -234,7 +234,7 @@ export async function markExpensePurchased(formData: FormData) {
   if (expense.status !== 'AWAITING_PURCHASE' && expense.status !== 'ADVANCE_PAID_AWAITING_RECEIPT') throw new Error('This expense is not waiting for a purchase or receipt.');
 
   if (expense.status === 'ADVANCE_PAID_AWAITING_RECEIPT') {
-    const advance = expense.advanceAmount ?? expense.amount;
+    const advance = Number(expense.advanceAmount ?? expense.amount);
     const difference = Number((advance - actualAmount).toFixed(2));
     let settlementStatus: 'SETTLED' | 'BALANCE_TO_RETURN' | 'ADDITIONAL_REIMBURSEMENT_REQUIRED';
     let settlementNote: string | null = null;
@@ -494,7 +494,7 @@ async function addExpensesToOpenWiseBatch(expenseIds: string[], userId: string) 
 
         const recipientIdNumber = Number(recipientId);
         if (!Number.isSafeInteger(recipientIdNumber)) throw new Error(`Invalid Wise recipient ID for expense ${expense.id}.`);
-        const quote = await createWiseQuote(recipientIdNumber, expense.amount);
+        const quote = await createWiseQuote(recipientIdNumber, Number(expense.amount));
         const quoteUuid = quote.id || quote.uuid;
         if (!quoteUuid) throw new Error(`Wise did not return a quote ID for expense ${expense.id}.`);
 
@@ -585,55 +585,6 @@ async function addExpensesToOpenWiseBatch(expenseIds: string[], userId: string) 
   } finally {
     await releaseWiseBatchLease(leaseToken);
   }
-}
-
-export async function resetExpenseToPending(formData: FormData) {
-  const user = await requireUser();
-  const expenseId = String(formData.get('expenseId') || '');
-  if (!expenseId) throw new Error('Expense not found.');
-
-  const expense = await prisma.expense.findUnique({ where: { id: expenseId }, include: { team: true, user: true } });
-  if (!expense) throw new Error('Expense not found.');
-
-  const email = (user.email ?? '').toLowerCase();
-  const isTeamApprover = !!email && expense.team.approverEmails.some((approver) => approver.toLowerCase() === email);
-  if (!user.isAdmin && !isTeamApprover) throw new Error("Only this team's configured approver or an admin can return this expense for approval.");
-  if (expense.status !== 'READY_TO_PAY') throw new Error('Only an approved expense that is ready to pay can be returned for approval.');
-  if (expense.paymentRunId || expense.wiseTransferId || expense.wiseBatchGroupId) {
-    throw new Error('This expense is already in a Wise payment run. Cancel that run first, then return the expense for approval.');
-  }
-
-  await prisma.expense.update({
-    where: { id: expense.id },
-    data: {
-      status: 'PENDING',
-      paymentStatus: 'NOT_READY',
-      approvedAmount: null,
-      decisionNote: 'Previous approval was returned for approval again.',
-      decidedAt: null,
-      paymentReference: null,
-      paidAt: null,
-      wiseStatus: null,
-    },
-  });
-
-  const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
-  const approvalUrl = `${appUrl}/dashboard/approvals`;
-  const approverEmails = [...new Set(expense.team.approverEmails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
-  if (approverEmails.length) {
-    await notify(
-      approverEmails,
-      `Expense returned for approval - £${expense.amount.toFixed(2)}`,
-      `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a"><h2>Expense needs approval again</h2><p style="color:#64748b">An approved expense was returned to <strong>Pending</strong> and needs to be reviewed again.</p><div style="padding:18px;border:1px solid #e2e8f0;border-radius:14px;margin:20px 0"><p style="margin:0 0 8px;font-size:20px;font-weight:700">£${expense.amount.toFixed(2)}</p><p style="margin:0">${escapeHtml(expense.description)}</p><p style="margin:8px 0 0;color:#64748b">${escapeHtml(expense.user.name || expense.user.email || 'Requester')} · ${escapeHtml(expense.team.name)}</p></div>${approvalUrl ? `<a href="${approvalUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Review expense</a>` : ''}</div>`,
-      `The expense "${expense.description}" (£${expense.amount.toFixed(2)}) for ${expense.user.name || expense.user.email || 'the requester'} has been returned to Pending and needs approval again.\n\n${approvalUrl || 'Open Proclaim Expenses to review it.'}`
-    );
-  }
-
-  revalidatePath('/dashboard/approvals');
-  revalidatePath('/dashboard/payments');
-  revalidatePath('/dashboard/expenses');
-  revalidatePath('/dashboard/expense-history');
-  revalidatePath('/dashboard');
 }
 
 export async function createWisePaymentRun() {
