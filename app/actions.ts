@@ -725,7 +725,7 @@ async function createWisePaymentRunForUser(userId: string, isAdmin: boolean, app
   });
   const eligible = expenses.filter(e => e.user.bankAccountName && e.user.bankSortCode && e.user.bankAccountNumber);
   if (!eligible.length) throw new Error('No ready expenses with complete bank details are available.');
-  await addExpensesToOpenWiseBatch(eligible.map(e => e.id), userId);
+  return await addExpensesToOpenWiseBatch(eligible.map(e => e.id), userId);
 }
 
 export async function completeWisePaymentRun(formData: FormData) {
