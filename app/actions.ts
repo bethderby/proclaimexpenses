@@ -11,6 +11,7 @@ import { createWiseBatchGroup, addWiseBatchTransfer, completeWiseBatchGroup, can
 import { decryptBankDetail } from '@/lib/bank';
 import { parseMoney, roundMoney, errorMessage } from '@/lib/money';
 import { deterministicWiseTransactionId, syncWisePaymentRunById } from '@/lib/wise-sync';
+import { recordAuditEvent } from '@/lib/audit';
 
 function escapeHtml(value: string) { return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] || char)); }
 
@@ -75,6 +76,8 @@ export async function submitExpense(formData: FormData) {
     },
   });
 
+  await recordAuditEvent({ actor: user, action: 'EXPENSE_SUBMITTED', entityType: 'EXPENSE', entityId: expense.id, expenseId: expense.id, teamId, targetUserId: user.id, summary: `Expense submitted for £${amount.toFixed(2)}`, metadata: { description, amount, purchaseStatus, paymentTiming, date, receiptAttached: !!receiptUrl } });
+
   const requester = escapeHtml(user.name || user.email || 'A person');
   const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
   const approvalUrl = `${appUrl}/dashboard/approvals`;
@@ -112,6 +115,7 @@ export async function updateExpense(formData: FormData) {
   const team = await prisma.team.findUnique({ where: { id: teamId } });
   if (!team) throw new Error('That team no longer exists.');
   await prisma.expense.update({ where: { id: expenseId }, data: { date: new Date(date), description, amount, teamId } });
+  await recordAuditEvent({ actor: user, action: 'EXPENSE_UPDATED', entityType: 'EXPENSE', entityId: expenseId, expenseId, teamId, targetUserId: expense.userId, summary: `Expense updated to £${amount.toFixed(2)}`, metadata: { date, description, amount, previousTeamId: expense.teamId } });
   revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard');
 }
 
@@ -151,6 +155,8 @@ export async function cancelExpense(formData: FormData) {
     },
   });
 
+  await recordAuditEvent({ actor: user, action: 'EXPENSE_CANCELLED', entityType: 'EXPENSE', entityId: expenseId, expenseId, teamId: expense.teamId, targetUserId: expense.userId, summary: 'Expense cancelled by requester', metadata: { previousStatus: expense.status, returnedToApproval: returnedToApproval } });
+
   revalidatePath('/dashboard/expenses');
   revalidatePath('/dashboard/expense-history');
   revalidatePath('/dashboard/approvals');
@@ -177,6 +183,8 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
   }
 
   await prisma.expense.update({ where: { id: expenseId }, data: { status: decision === 'REJECTED' ? 'REJECTED' : nextStatus, paymentStatus, approvedAmount: decision === 'APPROVED' ? expense.amount : null, decisionNote: note || null, decidedAt: new Date() } });
+
+  await recordAuditEvent({ actor: user, action: `EXPENSE_${decision}`, entityType: 'EXPENSE', entityId: expenseId, expenseId, teamId: expense.teamId, targetUserId: expense.userId, summary: `Expense ${decision === 'APPROVED' ? 'approved and made ready to pay' : 'rejected'}`, metadata: { decision, note: note || null, amount: expense.amount, relatedExpenseId: expense.relatedExpenseId } });
 
   // Once an approval makes the expense payable, immediately prepare the
   // current ready-to-pay set in Wise. This means the Wise batch is already
@@ -320,6 +328,7 @@ export async function markExpensePurchased(formData: FormData) {
           relatedExpenseId: expense.id,
         },
       });
+      await recordAuditEvent({ actor: user, action: 'ADDITIONAL_REIMBURSEMENT_CREATED', entityType: 'EXPENSE', entityId: extra.id, expenseId: extra.id, teamId: expense.teamId, targetUserId: expense.userId, summary: `Additional reimbursement created for £${extraAmount.toFixed(2)}`, metadata: { relatedExpenseId: expense.id, advanceAmount: advance, actualAmount, extraAmount } });
       const approverEmails = [...new Set(expense.team.approverEmails.map(e => e.trim().toLowerCase()).filter(Boolean))];
       const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
       const approvalUrl = `${appUrl}/dashboard/approvals`;
@@ -336,6 +345,8 @@ ${approvalUrl || 'Open Proclaim Expenses to review it.'}`
     }
 
 
+    await recordAuditEvent({ actor: user, action: 'EXPENSE_PURCHASE_CONFIRMED', entityType: 'EXPENSE', entityId: expenseId, expenseId, teamId: expense.teamId, targetUserId: expense.userId, summary: `Purchase confirmed and receipt recorded`, metadata: { actualAmount, advanceAmount: advance, difference, settlementStatus, receiptAttached: true } });
+
     if (user.email && settlementNote) {
       await notify(
         user.email,
@@ -346,6 +357,7 @@ ${approvalUrl || 'Open Proclaim Expenses to review it.'}`
     }
   } else {
     await prisma.expense.update({ where: { id: expenseId }, data: { purchasedAt: new Date(date), receiptUrl, actualAmount, receiptDueAt: null, lastReminderAt: null, status: 'READY_TO_PAY', paymentStatus: 'READY', settlementStatus: 'NOT_APPLICABLE' } });
+    await recordAuditEvent({ actor: user, action: 'EXPENSE_PURCHASE_CONFIRMED', entityType: 'EXPENSE', entityId: expenseId, expenseId, teamId: expense.teamId, targetUserId: expense.userId, summary: 'Purchase confirmed and receipt recorded', metadata: { actualAmount, receiptAttached: true } });
   }
   revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard'); revalidatePath('/dashboard/payments');
 }
@@ -359,6 +371,7 @@ export async function updateBankDetails(formData: FormData) {
   if (!/^\d{6}$/.test(sortCode)) throw new Error('Sort code must contain 6 digits.');
   if (!/^\d{8}$/.test(accountNumber)) throw new Error('Account number must contain 8 digits.');
   await prisma.user.update({ where: { id: user.id }, data: { bankAccountName: encryptBankDetail(accountName), bankSortCode: encryptBankDetail(sortCode), bankAccountNumber: encryptBankDetail(accountNumber) } });
+  await recordAuditEvent({ actor: user, action: 'BANK_DETAILS_UPDATED', entityType: 'USER', entityId: user.id, targetUserId: user.id, summary: 'Bank payout details updated', metadata: { sortCodeLast4: sortCode.slice(-4), accountNumberLast4: accountNumber.slice(-4) } });
   revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard/payments');
 }
 
@@ -660,6 +673,8 @@ export async function resetExpenseToPending(formData: FormData) {
     );
   }
 
+  await recordAuditEvent({ actor: user, action: 'EXPENSE_RETURNED_TO_PENDING', entityType: 'EXPENSE', entityId: expense.id, expenseId: expense.id, teamId: expense.teamId, targetUserId: expense.userId, summary: 'Approved expense returned to approval', metadata: { previousStatus: 'READY_TO_PAY' } });
+
   revalidatePath('/dashboard/approvals');
   revalidatePath('/dashboard/payments');
   revalidatePath('/dashboard/expenses');
@@ -677,6 +692,7 @@ export async function createWisePaymentRun() {
   if (run?.id) {
     await closeWisePaymentRunById(run.id);
   }
+  await recordAuditEvent({ actor: user, action: 'PAYMENT_RUN_CREATED', entityType: 'PAYMENT_RUN', entityId: run?.id ?? null, paymentRunId: run?.id ?? null, summary: run?.id ? `Wise payment run ${run.id} prepared` : 'Wise payment run preparation requested', metadata: { runId: run?.id ?? null } });
   revalidatePath('/dashboard/payments');
   revalidatePath('/dashboard/expenses');
   revalidatePath('/dashboard/expense-history');
@@ -888,6 +904,7 @@ export async function completeWisePaymentRun(formData: FormData) {
     await releaseWiseBatchLease(leaseToken);
   }
 
+  await recordAuditEvent({ actor: user, action: 'PAYMENT_RUN_COMPLETED', entityType: 'PAYMENT_RUN', entityId: runId, paymentRunId: runId, summary: 'Wise payment batch completed/prepared', metadata: { runId } });
   revalidatePath('/dashboard/payments');
   revalidatePath('/dashboard/expenses');
   revalidatePath('/dashboard/expense-history');
@@ -907,6 +924,7 @@ export async function syncWisePaymentRun(formData: FormData) {
     if (!allowed) throw new Error('You are not authorised to sync this payment batch.');
   }
   await syncWisePaymentRunById(runId);
+  await recordAuditEvent({ actor: user, action: 'PAYMENT_RUN_SYNCED', entityType: 'PAYMENT_RUN', entityId: runId, paymentRunId: runId, summary: 'Wise payment batch synchronised', metadata: { runId } });
   revalidatePath('/dashboard/payments'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard');
 }
 
@@ -962,6 +980,7 @@ export async function cancelPaymentRun(formData: FormData) {
   } finally {
     if (batchLeaseToken) await releaseWiseBatchLease(batchLeaseToken);
   }
+  await recordAuditEvent({ actor: user, action: 'PAYMENT_RUN_CANCELLED', entityType: 'PAYMENT_RUN', entityId: runId, paymentRunId: runId, summary: 'Wise payment batch cancelled', metadata: { runId } });
   revalidatePath('/dashboard/payments'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history');
 }
 
@@ -972,6 +991,7 @@ export async function updateBudget(teamId: string, target: number) {
   const allowed = user.isAdmin || team.approverEmails.some(e => e.toLowerCase() === (user.email ?? '').toLowerCase());
   if (!allowed) throw new Error("Only this team's configured approver or an admin can change its budget.");
   await prisma.team.update({ where: { id: teamId }, data: { budgetTarget: target } });
+  await recordAuditEvent({ actor: user, action: 'TEAM_BUDGET_UPDATED', entityType: 'TEAM', entityId: teamId, teamId, summary: `Team budget updated to £${target.toFixed(2)}`, metadata: { target } });
   revalidatePath('/dashboard/reports');
 }
 
@@ -983,7 +1003,8 @@ export async function createTeam(formData: FormData) {
   const budgetTarget = parseMoney(formData.get('budgetTarget'), { min: 0, allowZero: true });
   if (!name) throw new Error('A team name is required.');
   if (!approverEmails.length || approverEmails.some(e => !e.includes('@'))) throw new Error('Add at least one valid approver email.');
-  await prisma.team.create({ data: { name, approverEmails, budgetTarget } });
+  const team = await prisma.team.create({ data: { name, approverEmails, budgetTarget } });
+  await recordAuditEvent({ actor: user, action: 'TEAM_CREATED', entityType: 'TEAM', entityId: team.id, teamId: team.id, summary: `Team created: ${name}`, metadata: { name, approverEmails, budgetTarget } });
   revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard/approvals');
 }
 
@@ -997,6 +1018,7 @@ export async function updateTeam(formData: FormData) {
   if (!teamId || !name) throw new Error('A team name is required.');
   if (!approverEmails.length || approverEmails.some(e => !e.includes('@'))) throw new Error('Add at least one valid approver email.');
   await prisma.team.update({ where: { id: teamId }, data: { name, approverEmails, budgetTarget } });
+  await recordAuditEvent({ actor: user, action: 'TEAM_UPDATED', entityType: 'TEAM', entityId: teamId, teamId, summary: `Team updated: ${name}`, metadata: { name, approverEmails, budgetTarget } });
   revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/reports'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history');
 }
 
@@ -1009,6 +1031,7 @@ export async function deleteTeam(formData: FormData) {
     await tx.expense.deleteMany({ where: { teamId } });
     await tx.team.delete({ where: { id: teamId } });
   });
+  await recordAuditEvent({ actor: user, action: 'TEAM_DELETED', entityType: 'TEAM', entityId: teamId, teamId, summary: `Team deleted`, metadata: { teamId } });
   revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard/reports'); revalidatePath('/dashboard/approvals');
 }
 
@@ -1019,7 +1042,8 @@ export async function setAdminStatus(formData: FormData) {
   const isAdmin = String(formData.get('isAdmin')) === 'true';
   if (!email) throw new Error('Email is required.');
   if (!isAdmin && email === (user.email ?? '').toLowerCase()) throw new Error('You cannot remove your own admin access.');
-  await prisma.user.upsert({ where: { email }, update: { isAdmin, ...(isAdmin ? { removedAt: null } : {}) }, create: { email, isAdmin } });
+  const target = await prisma.user.upsert({ where: { email }, update: { isAdmin, ...(isAdmin ? { removedAt: null } : {}) }, create: { email, isAdmin } });
+  await recordAuditEvent({ actor: user, action: isAdmin ? 'ADMIN_ACCESS_GRANTED' : 'ADMIN_ACCESS_REVOKED', entityType: 'USER', entityId: target.id, targetUserId: target.id, summary: isAdmin ? `Administrator access granted to ${email}` : `Administrator access revoked from ${email}`, metadata: { email, isAdmin } });
   revalidatePath('/dashboard/teams');
 }
 
@@ -1040,6 +1064,7 @@ export async function removeUser(formData: FormData) {
     // those stay linked to this User row for accounting.
     await tx.user.update({ where: { id: target.id }, data: { isAdmin: false, removedAt: new Date(), bankAccountName: null, bankSortCode: null, bankAccountNumber: null } });
   });
+  await recordAuditEvent({ actor: user, action: 'USER_REMOVED', entityType: 'USER', entityId: target.id, targetUserId: target.id, summary: `User removed: ${email}`, metadata: { email } });
   revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history');
 }
 
@@ -1057,6 +1082,7 @@ export async function sendReportNow(formData: FormData) {
   const schedule = await prisma.reportSchedule.findUnique({ where: { id: 'default' }, select: { recipients: true } });
   const { sendCombinedReport } = await import('@/lib/report');
   await sendCombinedReport(start, new Date(end.getTime() + 1), { manual: true, recipients: schedule?.recipients ?? [] });
+  await recordAuditEvent({ actor: user, action: 'REPORT_SENT', entityType: 'REPORT', entityId: null, summary: `Report sent for ${startValue} to ${endValue}`, metadata: { start: startValue, end: endValue, recipients: schedule?.recipients ?? [] } });
   revalidatePath('/dashboard/reports');
 }
 
@@ -1076,5 +1102,6 @@ export async function saveReportSchedule(formData: FormData) {
     update: { enabled, dayOfMonth, hour, timezone: 'Europe/London', recipients },
     create: { id: 'default', enabled, dayOfMonth, hour, timezone: 'Europe/London', recipients },
   });
+  await recordAuditEvent({ actor: user, action: 'REPORT_SCHEDULE_UPDATED', entityType: 'REPORT_SCHEDULE', entityId: 'default', summary: 'Automated report schedule updated', metadata: { enabled, dayOfMonth, recipients } });
   revalidatePath('/dashboard/reports');
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendCombinedReport } from '@/lib/report';
 import { isAuthorizedCronRequest } from '@/lib/cron-auth';
+import { recordAuditEvent } from '@/lib/audit';
 
 function getLocalParts(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -16,6 +17,8 @@ function getLocalParts(date: Date, timeZone: string) {
   const values = Object.fromEntries(parts.filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]));
   return { year: Number(values.year), month: Number(values.month), day: Number(values.day), hour: Number(values.hour), minute: Number(values.minute) };
 }
+
+function formatDateRange(start: Date, end: Date) { return `${start.toISOString().slice(0, 10)} to ${end.toISOString().slice(0, 10)}`; }
 
 export async function GET(req: NextRequest) {
   if (!isAuthorizedCronRequest(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -45,6 +48,7 @@ export async function GET(req: NextRequest) {
   try {
     const result = await sendCombinedReport(start, end, { recipients: schedule.recipients });
     await prisma.reportSchedule.update({ where: { id: 'default' }, data: { lastSentAt: now } });
+    await recordAuditEvent({ action: 'MONTHLY_REPORT_SENT', entityType: 'REPORT', entityId: 'monthly', summary: `Automated monthly report sent for ${formatDateRange(start, end)}`, metadata: { start: start.toISOString(), end: end.toISOString(), recipients: schedule.recipients, result } });
     return NextResponse.json({ ok: true, ...result });
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not send report.' }, { status: 500 });

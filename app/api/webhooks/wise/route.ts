@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyWiseWebhookSignature } from '@/lib/wise-webhook';
 import { syncWisePaymentRunById } from '@/lib/wise-sync';
+import { recordAuditEvent } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
   if (!transferId) return NextResponse.json({ status: 'ignored' });
 
   try {
+    await recordAuditEvent({ action: 'WISE_WEBHOOK_RECEIVED', entityType: 'WISE_WEBHOOK', entityId: transferId, summary: `Wise transfer state webhook received for ${transferId}`, metadata: { eventType: event?.event_type, transferId } });
     const expense = await prisma.expense.findFirst({
       where: { wiseTransferId: transferId },
       select: { paymentRunId: true },

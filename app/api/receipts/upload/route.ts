@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { issueSignedToken, presignUrl, put } from '@vercel/blob';
+import { recordAuditEvent } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 
@@ -58,6 +59,8 @@ export async function POST(req: NextRequest) {
       access: 'private',
       validUntil: Date.now() + 10 * 60 * 1000,
     });
+
+    await recordAuditEvent({ actor: session.user, action: 'RECEIPT_UPLOADED', entityType: 'RECEIPT', entityId: blob.pathname, summary: `Receipt uploaded: ${file.name}`, metadata: { pathname: blob.pathname, contentType: file.type, size: file.size, filename: file.name } });
 
     return NextResponse.json({
       url: blob.url,

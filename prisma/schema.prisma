@@ -55,6 +55,8 @@ model User {
   sessions          Session[]
   expenses          Expense[]
   paymentRunsCreated PaymentRun[]
+  auditEvents       AuditEvent[] @relation("AuditActorUser")
+  auditTargetEvents AuditEvent[] @relation("AuditTargetUser")
 }
 
 model Team {
@@ -63,6 +65,7 @@ model Team {
   approverEmails String[] @default([])
   budgetTarget   Float    @default(0)
   expenses       Expense[]
+  auditEvents    AuditEvent[]
 }
 
 enum PurchaseStatus {
@@ -128,9 +131,41 @@ model PaymentRun {
   createdById String?
   createdBy   User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
   expenses    Expense[]
+  auditEvents AuditEvent[]
 }
 
 
+
+
+model AuditEvent {
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now())
+  actorId      String?
+  actorName    String?
+  actorEmail   String?
+  action       String
+  entityType   String
+  entityId     String?
+  expenseId    String?
+  paymentRunId String?
+  teamId       String?
+  targetUserId String?
+  summary      String
+  metadata     Json?
+
+  actor        User?        @relation("AuditActorUser", fields: [actorId], references: [id], onDelete: SetNull)
+  expense      Expense?     @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  paymentRun   PaymentRun?  @relation(fields: [paymentRunId], references: [id], onDelete: SetNull)
+  team         Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  targetUser   User?        @relation("AuditTargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([expenseId, createdAt])
+  @@index([paymentRunId, createdAt])
+  @@index([teamId, createdAt])
+}
 
 model ReportSchedule {
   id          String   @id @default("default")
@@ -179,4 +214,5 @@ model Expense {
   wiseStatus         String?
   relatedExpenseId   String?
   wasInCancelledPaymentRun Boolean @default(false)
+  auditEvents       AuditEvent[]
 }

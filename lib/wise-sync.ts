@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { recordAuditEvent } from '@/lib/audit';
 import { getWiseBatchGroup, getWiseTransfer } from '@/lib/wise';
 import { notify, escapeHtml } from '@/lib/notify';
 
@@ -134,6 +135,25 @@ ${expensesUrl || ''}`,
       });
     }
   });
+
+  for (const transfer of transfers) {
+    const expense = refreshed.find(e => e.wiseTransferId === String(transfer.id));
+    if (!expense) continue;
+    const state = String(transfer.status || 'unknown');
+    await recordAuditEvent({
+      action: 'WISE_TRANSFER_STATUS',
+      entityType: 'EXPENSE',
+      entityId: expense.id,
+      expenseId: expense.id,
+      paymentRunId: runId,
+      teamId: expense.teamId,
+      targetUserId: expense.userId,
+      summary: `Wise transfer ${String(transfer.id)} reported ${state}`,
+      metadata: { wiseTransferId: String(transfer.id), wiseStatus: state, paymentStatus: expense.paymentStatus, expenseStatus: expense.status },
+    });
+  }
+
+  await recordAuditEvent({ action: 'WISE_SYNC_COMPLETED', entityType: 'PAYMENT_RUN', entityId: runId, paymentRunId: runId, summary: `Wise sync completed with batch status ${batchStatus}`, metadata: { batchStatus, transferCount: transfers.length, successfulTransfers: transfers.filter(t => String(t.status || '').toLowerCase() === 'outgoing_payment_sent').length, failedTransfers: transfers.filter(t => ['bounced_back','funds_refunded','cancelled'].includes(String(t.status || '').toLowerCase())).length } });
 
   for (const n of paidNotifications) {
     await notify(n.email, n.subject, n.html, n.text);

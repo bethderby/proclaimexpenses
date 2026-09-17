@@ -11,7 +11,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "postinstall": "prisma generate",
     "typecheck": "prisma generate && tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "test:ci": "npm test"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

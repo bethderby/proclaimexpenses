@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { isWiseConfigured } from '@/lib/wise';
 import { syncWisePaymentRunById } from '@/lib/wise-sync';
 import { isAuthorizedCronRequest } from '@/lib/cron-auth';
+import { recordAuditEvent } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 
@@ -36,5 +37,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  await recordAuditEvent({ action: 'WISE_SYNC_CRON_RUN', entityType: 'CRON', entityId: 'wise-sync', summary: `Wise sync job checked ${runs.length} payment runs`, metadata: { checked: runs.length, successful: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, results } });
   return NextResponse.json({ ok: true, checked: runs.length, results });
 }
