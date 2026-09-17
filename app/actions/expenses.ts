@@ -109,12 +109,30 @@ export async function cancelExpense(formData: FormData) {
   if (expense.relatedExpenseId) {
     throw new Error('Additional reimbursements created from an advance cannot be cancelled by the requester. An admin must reject them if needed.');
   }
+  // Cancellation is intentionally idempotent. A double form submission can
+  // otherwise make the second request re-read the expense as CANCELLED and
+  // surface a misleading "can no longer be cancelled" error to the requester.
+  if (expense.status === 'CANCELLED') return;
+
   if (expense.status !== 'PENDING' && !returnedToApproval) {
     throw new Error('This expense can no longer be cancelled.');
   }
 
-  await prisma.expense.update({
-    where: { id: expenseId },
+  // Claim the cancellation atomically so a concurrent approval/payment
+  // transition cannot be overwritten by a stale cancellation request.
+  const cancelled = await prisma.expense.updateMany({
+    where: {
+      id: expenseId,
+      userId: user.id,
+      OR: [
+        { status: 'PENDING' },
+        {
+          status: 'READY_TO_PAY',
+          wasInCancelledPaymentRun: true,
+          decisionNote: 'Previous approval was returned for approval again.',
+        },
+      ],
+    },
     data: {
       status: 'CANCELLED',
       paymentStatus: 'NOT_READY',
@@ -127,6 +145,17 @@ export async function cancelExpense(formData: FormData) {
       decidedAt: null,
     },
   });
+
+  if (cancelled.count === 0) {
+    // Another request won the race. If it cancelled the expense, treat the
+    // action as already completed; otherwise preserve the normal state guard.
+    const current = await prisma.expense.findUnique({
+      where: { id: expenseId },
+      select: { status: true },
+    });
+    if (current?.status === 'CANCELLED') return;
+    throw new Error('This expense can no longer be cancelled.');
+  }
 
   await recordAuditEvent({ actor: user, action: 'EXPENSE_CANCELLED', entityType: 'EXPENSE', entityId: expenseId, expenseId, teamId: expense.teamId, targetUserId: expense.userId, summary: 'Expense cancelled by requester', metadata: { previousStatus: expense.status, returnedToApproval: returnedToApproval } });
 
