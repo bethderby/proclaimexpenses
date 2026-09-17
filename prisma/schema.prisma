@@ -98,6 +98,7 @@ enum PaymentStatus {
 
 enum PaymentRunStatus {
   DRAFT
+  WISE_OPEN
   WISE_RECOVERY_REQUIRED
   WISE_PREPARED
   WISE_FUNDED
@@ -128,6 +129,7 @@ model PaymentRun {
   createdBy   User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
   expenses    Expense[]
 }
+
 
 
 model ReportSchedule {

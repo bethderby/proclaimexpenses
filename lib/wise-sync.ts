@@ -55,8 +55,9 @@ export async function syncWisePaymentRunById(runId: string) {
   const paidNotifications: { email: string; subject: string; html: string; text: string }[] = [];
 
   await prisma.$transaction(async tx => {
-    let nextStatus: 'WISE_PREPARED' | 'WISE_RECOVERY_REQUIRED' | 'COMPLETED' | 'CANCELLED' = 'WISE_RECOVERY_REQUIRED';
+    let nextStatus: 'WISE_OPEN' | 'WISE_PREPARED' | 'WISE_RECOVERY_REQUIRED' | 'COMPLETED' | 'CANCELLED' = 'WISE_RECOVERY_REQUIRED';
     if (batchCancelled) nextStatus = 'CANCELLED';
+    else if (batchStatus === 'NEW' && run.status === 'WISE_OPEN') nextStatus = 'WISE_OPEN';
     else if (allSuccessful) nextStatus = 'COMPLETED';
     else if (prepared && (allComplete || transfers.length === refreshed.length)) nextStatus = 'WISE_PREPARED';
 

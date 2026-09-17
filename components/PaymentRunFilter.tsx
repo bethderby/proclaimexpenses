@@ -6,6 +6,7 @@ import { useTransition } from 'react';
 const statuses = [
   ['ALL', 'All statuses'],
   ['DRAFT', 'Draft'],
+  ['WISE_OPEN', 'Open batch'],
   ['WISE_RECOVERY_REQUIRED', 'Recovery required'],
   ['WISE_PREPARED', 'Prepared'],
   ['WISE_FUNDED', 'Funded'],

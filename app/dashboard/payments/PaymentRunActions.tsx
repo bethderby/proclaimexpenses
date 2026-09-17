@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { cancelPaymentRun, createWisePaymentRun, syncWisePaymentRun } from '@/app/actions';
+import { cancelPaymentRun, completeWisePaymentRun, createWisePaymentRun, syncWisePaymentRun } from '@/app/actions';
 
 function friendlyError(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -56,13 +56,19 @@ export function PaymentRunActions({
   status: string;
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState<'sync' | 'cancel' | null>(null);
+  const [busy, setBusy] = useState<'sync' | 'complete' | 'cancel' | null>(null);
   const [error, setError] = useState('');
 
   const canAct = status !== 'COMPLETED' && status !== 'CANCELLED';
 
-  async function runAction(kind: 'sync' | 'cancel') {
+  async function runAction(kind: 'sync' | 'complete' | 'cancel') {
     if (!canAct || busy) return;
+
+    if (kind === 'complete' && !window.confirm(
+      'Close this Wise batch? No more expenses can be added to it after it is closed. You can then fund it in Wise.'
+    )) {
+      return;
+    }
 
     if (kind === 'cancel' && !window.confirm(
       'Cancel this payment run? Any unfunded Wise transfers that can be cancelled will be cancelled, and the expenses will be returned to Ready to pay.'
@@ -79,6 +85,8 @@ export function PaymentRunActions({
 
       if (kind === 'sync') {
         await syncWisePaymentRun(formData);
+      } else if (kind === 'complete') {
+        await completeWisePaymentRun(formData);
       } else {
         await cancelPaymentRun(formData);
       }
@@ -98,6 +106,17 @@ export function PaymentRunActions({
       <div className="flex flex-wrap items-center gap-2">
         {canAct && (
           <>
+            {status === 'WISE_OPEN' && (
+              <button
+                type="button"
+                onClick={() => runAction('complete')}
+                disabled={busy !== null}
+                aria-busy={busy === 'complete'}
+                className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busy === 'complete' ? 'Closing batch…' : 'Close batch'}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => runAction('sync')}
