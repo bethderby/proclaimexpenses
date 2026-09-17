@@ -17,7 +17,8 @@ export default function ExpenseHistoryTable({expenses,teams,initialExpenseId}:{e
  const [editing,setEditing]=useState(false);
  const close=()=>{setSelected(null);setEditing(false)};
  useEffect(()=>{
-  const expenseId=initialExpenseId ?? new URLSearchParams(window.location.search).get('expenseId');
+  const hash = window.location.hash;
+  const expenseId = initialExpenseId ?? (hash.startsWith('#expense-') ? decodeURIComponent(hash.slice('#expense-'.length)) : null);
   if(expenseId && !selected){
    const match=expenses.find(e=>e.id===expenseId);
    if(match) setSelected(match);
