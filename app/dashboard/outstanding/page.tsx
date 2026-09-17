@@ -13,7 +13,7 @@ const dayLabel=(n:number)=>n===0?'Today':n===1?'1 day':`${n} days`;
 export default async function OutstandingPage(){
  const session=await getServerSession(authOptions);if(!session?.user)redirect('/login');const user=session.user;if(!user.isAdmin)redirect('/dashboard');
 
- const [teams,missingReceipts,readyToPay,paymentIssues]=await Promise.all([
+ const [missingReceipts, readyToPay, paymentIssues] = await Promise.all([
   prisma.expense.findMany({where:{status:'ADVANCE_PAID_AWAITING_RECEIPT'},include:{user:true,team:true},orderBy:{receiptDueAt:'asc'}}),
   prisma.expense.findMany({where:{status:'READY_TO_PAY'},include:{user:true,team:true},orderBy:{decidedAt:'asc'}}),
   prisma.expense.findMany({where:{paymentStatus:'FAILED',status:{notIn:['REJECTED','CANCELLED']}},include:{user:true,team:true},orderBy:{submittedAt:'desc'}}),
