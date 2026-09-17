@@ -40,13 +40,15 @@ function MetricCard({
 export default async function DashboardPage(){
  const session=await getServerSession(authOptions);if(!session?.user)redirect('/login');const user=session.user as any;
  const pendingWhere:any=user.isAdmin?{status:'PENDING'}:user.isApprover?{status:'PENDING',team:{approverEmails:{has:(user.email??'').toLowerCase()}}}:{status:'PENDING',userId:user.id};
- const [expenses,pending,needsReceipt,ready]=await Promise.all([
+ const [expenses,expenseCount,expenseTotal,pending,needsReceipt,ready]=await Promise.all([
   prisma.expense.findMany({where:{userId:user.id},include:{team:true},orderBy:{submittedAt:'desc'},take:5}),
+  prisma.expense.count({where:{userId:user.id}}),
+  prisma.expense.aggregate({where:{userId:user.id},_sum:{amount:true}}),
   prisma.expense.count({where:pendingWhere}),
   prisma.expense.count({where:{userId:user.id,status:'ADVANCE_PAID_AWAITING_RECEIPT'}}),
   user.isAdmin||user.isApprover?prisma.expense.count({where:user.isAdmin?{status:'READY_TO_PAY'}:{status:'READY_TO_PAY',team:{approverEmails:{has:(user.email??'').toLowerCase()}}}}):Promise.resolve(0),
  ]);
- const total=expenses.reduce((s,e)=>s+e.amount,0);
+ const total=expenseTotal._sum.amount??0;
  return <div className="page-stack dashboard-page">
   <header className="page-header dashboard-header">
     <div>
@@ -58,7 +60,7 @@ export default async function DashboardPage(){
   </header>
 
   <section className="metric-grid" aria-label="Expense summary">
-    <MetricCard label="My expenses" value={expenses.length} note={`${fmt(total)} across recent expenses`} icon={ReceiptText} tone="gold" href="/dashboard/expense-history" />
+    <MetricCard label="My expenses" value={expenseCount} note={`${fmt(total)} across all expenses`} icon={ReceiptText} tone="gold" href="/dashboard/expense-history" />
     <MetricCard label="Waiting for approval" value={pending} note="Expenses not yet approved" icon={Clock3} tone="blue" href="/dashboard/approvals" />
     <MetricCard label="Receipt needed" value={needsReceipt} note="Advances awaiting receipt" icon={CheckCircle2} tone="green" href="/dashboard/expense-history" />
     {(user.isAdmin||user.isApprover)&&<MetricCard label="Ready to pay" value={ready} note="Ready for payment runs" icon={CreditCard} tone="purple" href="/dashboard/payments" />}

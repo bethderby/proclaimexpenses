@@ -149,15 +149,23 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
   // manual "Prepare Wise payment run" step.
   let wisePreparedAutomatically = false;
   let wisePreparationError: string | null = null;
-  if (decision === 'APPROVED' && paymentStatus === 'READY' && isWiseConfigured()) {
+  if (isWiseConfigured()) {
     try {
-      await createWisePaymentRun();
-      wisePreparedAutomatically = true;
+      if (decision === 'APPROVED' && paymentStatus === 'READY') {
+        await createWisePaymentRun();
+        wisePreparedAutomatically = true;
+      }
+
+      // Once this approver has no remaining pending approvals in their scope,
+      // automatically add any final eligible ready expenses and close the open
+      // Wise batch. The approver should only have to fund the completed batch
+      // in Wise; there is no web-app Review/Close step.
+      await autoCompleteWiseBatchIfApprovalsAreComplete(user.id);
     } catch (error: any) {
-      // Approval must not be rolled back because Wise preparation failed.
-      // The expense remains READY and can be prepared manually from Payments.
+      // Approval must not be rolled back because Wise preparation/finalisation failed.
+      // The expense remains in its approved/ready state and the failure is logged.
       wisePreparationError = error?.message || 'Wise payment preparation failed.';
-      console.error('Automatic Wise payment run preparation failed', { expenseId, error });
+      console.error('Automatic Wise payment preparation/finalisation failed', { expenseId, error });
     }
   }
 
@@ -583,7 +591,86 @@ export async function createWisePaymentRun() {
   if (!isWiseConfigured()) throw new Error('Wise is not configured. Add WISE_API_TOKEN and WISE_PROFILE_ID first.');
 
   const approverEmail = (user.email ?? '').toLowerCase();
-  const where: any = user.isAdmin
+  await createWisePaymentRunForUser(user.id, user.isAdmin, approverEmail);
+  revalidatePath('/dashboard/payments');
+  revalidatePath('/dashboard/expenses');
+  revalidatePath('/dashboard/expense-history');
+}
+
+async function autoCompleteWiseBatchIfApprovalsAreComplete(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, isAdmin: true, isApprover: true, email: true } });
+  if (!user || (!user.isAdmin && !user.isApprover) || !isWiseConfigured()) return false;
+
+  const approverEmail = (user.email ?? '').toLowerCase();
+  const pendingWhere: any = user.isAdmin
+    ? { status: 'PENDING' }
+    : { status: 'PENDING', team: { approverEmails: { has: approverEmail } } };
+
+  const pendingCount = await prisma.expense.count({ where: pendingWhere });
+  if (pendingCount > 0) return false;
+
+  // Pick up any eligible ready expenses that may have become payable without
+  // going through decideExpense (for example after a purchase/receipt update).
+  // createWisePaymentRun owns its own Wise lease, so do this before acquiring
+  // the lease used to close the batch.
+  try {
+    await createWisePaymentRunForUser(user.id, user.isAdmin, approverEmail);
+  } catch (error: any) {
+    // There may simply be nothing eligible to add. Do not treat that as a
+    // failure: an existing open batch can still be completed below.
+    if (!String(error?.message || '').toLowerCase().includes('no ready expenses')) throw error;
+  }
+
+  const leaseToken = await acquireWiseBatchLease();
+  try {
+    // Re-check after taking the lease so a concurrent approval gets a chance
+    // to add its transfer before the batch is closed.
+    const latestPendingCount = await prisma.expense.count({ where: pendingWhere });
+    if (latestPendingCount > 0) return false;
+
+    const run = await prisma.paymentRun.findFirst({
+      where: user.isAdmin
+        ? { status: 'WISE_OPEN', wiseBatchGroupId: { not: null } }
+        : {
+            status: 'WISE_OPEN',
+            wiseBatchGroupId: { not: null },
+            expenses: { some: { team: { approverEmails: { has: approverEmail } } } },
+          },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!run?.wiseBatchGroupId) return false;
+
+    const batch = await getWiseBatchGroup(run.wiseBatchGroupId);
+    const batchStatus = String(batch.status || '').toUpperCase();
+    if (batchStatus === 'COMPLETED') {
+      await prisma.paymentRun.update({
+        where: { id: run.id },
+        data: { status: 'WISE_PREPARED', wiseStatus: 'COMPLETED', exportedAt: new Date() },
+      });
+      await prisma.expense.updateMany({ where: { paymentRunId: run.id }, data: { wiseStatus: 'prepared' } });
+      return true;
+    }
+
+    if (batchStatus !== 'NEW') {
+      throw new Error(`Wise reports this batch as ${batchStatus.toLowerCase()}, so it cannot be completed automatically.`);
+    }
+
+    const completed = await completeWiseBatchGroup(run.wiseBatchGroupId, Number(batch.version));
+    await prisma.$transaction(async tx => {
+      await tx.paymentRun.update({
+        where: { id: run.id },
+        data: { status: 'WISE_PREPARED', wiseStatus: String(completed.status || 'COMPLETED'), exportedAt: new Date() },
+      });
+      await tx.expense.updateMany({ where: { paymentRunId: run.id }, data: { wiseStatus: 'prepared' } });
+    });
+    return true;
+  } finally {
+    await releaseWiseBatchLease(leaseToken);
+  }
+}
+
+async function createWisePaymentRunForUser(userId: string, isAdmin: boolean, approverEmail: string) {
+  const where: any = isAdmin
     ? { paymentStatus: 'READY', paymentRunId: null }
     : { paymentStatus: 'READY', paymentRunId: null, team: { approverEmails: { has: approverEmail } } };
 
@@ -594,11 +681,7 @@ export async function createWisePaymentRun() {
   });
   const eligible = expenses.filter(e => e.user.bankAccountName && e.user.bankSortCode && e.user.bankAccountNumber);
   if (!eligible.length) throw new Error('No ready expenses with complete bank details are available.');
-
-  await addExpensesToOpenWiseBatch(eligible.map(e => e.id), user.id);
-  revalidatePath('/dashboard/payments');
-  revalidatePath('/dashboard/expenses');
-  revalidatePath('/dashboard/expense-history');
+  await addExpensesToOpenWiseBatch(eligible.map(e => e.id), userId);
 }
 
 export async function completeWisePaymentRun(formData: FormData) {
