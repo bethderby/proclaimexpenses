@@ -1,6 +1,6 @@
-import { Ban, CheckCircle2, Clock, CreditCard, CircleAlert, ReceiptText, ShoppingCart, XCircle } from 'lucide-react';
+import { Ban, CheckCircle2, Clock, CreditCard, CircleAlert, ReceiptText, XCircle, type LucideIcon } from 'lucide-react';
 
-export const STATUS_META: Record<string, { label: string; icon: any; cls: string }> = {
+export const STATUS_META: Record<string, { label: string; icon: LucideIcon; cls: string }> = {
   PENDING: { label: 'Pending approval', icon: Clock, cls: 'bg-amber-50 text-amber-700 border-amber-200' },
   APPROVED: { label: 'Approved', icon: CheckCircle2, cls: 'bg-[#FFF8E1] text-[#C99600] border-[#F3D36A]' },
   REJECTED: { label: 'Rejected', icon: XCircle, cls: 'bg-rose-50 text-rose-700 border-rose-200' },

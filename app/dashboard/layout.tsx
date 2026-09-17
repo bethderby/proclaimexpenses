@@ -7,7 +7,7 @@ import Sidebar from '@/components/Sidebar';
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect('/login');
-  const user = session.user as any;
+  const user = session.user;
   const pendingCount = user.isAdmin
     ? await prisma.expense.count({ where: { status: 'PENDING' } })
     : user.isApprover

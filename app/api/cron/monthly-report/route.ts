@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendCombinedReport } from '@/lib/report';
+import { isAuthorizedCronRequest } from '@/lib/cron-auth';
 
 function getLocalParts(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -17,8 +18,7 @@ function getLocalParts(date: Date, timeZone: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const auth = req.headers.get('authorization');
-  if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!isAuthorizedCronRequest(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const schedule = await prisma.reportSchedule.findUnique({ where: { id: 'default' } });
   if (!schedule) return NextResponse.json({ ok: true, skipped: true, reason: 'Report schedule has not been configured.' });
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     const result = await sendCombinedReport(start, end, { recipients: schedule.recipients });
     await prisma.reportSchedule.update({ where: { id: 'default' }, data: { lastSentAt: now } });
     return NextResponse.json({ ok: true, ...result });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Could not send report.' }, { status: 500 });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not send report.' }, { status: 500 });
   }
 }

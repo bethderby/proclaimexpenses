@@ -8,7 +8,7 @@ import ReportSchedule from '@/components/ReportSchedule';
 
 function monthLabel(mk:string){const[y,m]=mk.split('-');return new Date(Number(y),Number(m)-1,1).toLocaleDateString('en-US',{month:'short',year:'numeric'});}
 export default async function ReportsPage(){
- const session=await getServerSession(authOptions); if(!session?.user)redirect('/login'); const user=session.user as any; if(!user.isAdmin)redirect('/dashboard');
+ const session=await getServerSession(authOptions); if(!session?.user)redirect('/login'); const user=session.user; if(!user.isAdmin)redirect('/dashboard');
  const [teams,expenses,schedule]=await Promise.all([prisma.team.findMany({orderBy:{name:'asc'}}),prisma.expense.findMany({where:{status:{notIn:['CANCELLED','REJECTED','PAYMENT_FAILED']},paymentStatus:{not:'FAILED'}},include:{team:true},orderBy:{date:'asc'}}),prisma.reportSchedule.findUnique({where:{id:'default'}})]);
  const spendByTeam:Record<string,number>={}; teams.forEach(t=>spendByTeam[t.id]=0); expenses.forEach(e=>spendByTeam[e.teamId]=(spendByTeam[e.teamId]||0)+e.amount);
  const barData=teams.map(t=>({name:t.name,Spent:Math.round(spendByTeam[t.id]||0)}));

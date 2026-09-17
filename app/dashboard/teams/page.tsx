@@ -9,7 +9,7 @@ import RemoveUserButton from '@/components/RemoveUserButton';
 import { setAdminStatus } from '@/app/actions';
 
 export default async function TeamsPage(){
- const session=await getServerSession(authOptions); if(!session?.user)redirect('/login'); const user=session.user as any; if(!user.isAdmin)redirect('/dashboard');
+ const session=await getServerSession(authOptions); if(!session?.user)redirect('/login'); const user=session.user; if(!user.isAdmin)redirect('/dashboard');
  const now=new Date(); const monthStart=new Date(now.getFullYear(),now.getMonth(),1); const nextMonth=new Date(now.getFullYear(),now.getMonth()+1,1);
  const [teams,users,expenses,pending]=await Promise.all([
   prisma.team.findMany({orderBy:{name:'asc'}}),

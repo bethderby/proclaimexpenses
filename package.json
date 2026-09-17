@@ -10,7 +10,8 @@
     "vercel-build": "prisma generate && prisma migrate deploy && next build",
     "db:migrate:deploy": "prisma migrate deploy",
     "postinstall": "prisma generate",
-    "typecheck": "prisma generate && tsc --noEmit"
+    "typecheck": "prisma generate && tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

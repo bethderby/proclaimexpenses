@@ -11,7 +11,7 @@ const daysSince=(value:Date)=>Math.max(0,Math.floor((Date.now()-value.getTime())
 const dayLabel=(n:number)=>n===0?'Today':n===1?'1 day':`${n} days`;
 
 export default async function OutstandingPage(){
- const session=await getServerSession(authOptions);if(!session?.user)redirect('/login');const user=session.user as any;if(!user.isAdmin)redirect('/dashboard');
+ const session=await getServerSession(authOptions);if(!session?.user)redirect('/login');const user=session.user;if(!user.isAdmin)redirect('/dashboard');
 
  const [teams,missingReceipts,readyToPay,paymentIssues]=await Promise.all([
   prisma.team.findMany({orderBy:{name:'asc'}}),

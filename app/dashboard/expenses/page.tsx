@@ -7,7 +7,7 @@ import BankDetailsForm from '@/components/BankDetailsForm';
 import { decryptBankDetail } from '@/lib/bank';
 
 export default async function ExpensesPage(){
- const session=await getServerSession(authOptions);if(!session?.user)redirect('/login');const user=session.user as any;
+ const session=await getServerSession(authOptions);if(!session?.user)redirect('/login');const user=session.user;
  const [teams,dbUser]=await Promise.all([
   prisma.team.findMany({orderBy:{name:'asc'}}),
   prisma.user.findUnique({where:{id:user.id},select:{bankAccountName:true,bankSortCode:true,bankAccountNumber:true}}),

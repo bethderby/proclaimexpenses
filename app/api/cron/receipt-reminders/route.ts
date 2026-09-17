@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { isAuthorizedCronRequest } from '@/lib/cron-auth';
 
 function escapeHtml(value:string){return value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));}
 export async function GET(req:NextRequest){
- const secret=process.env.CRON_SECRET;if(secret&&req.headers.get('authorization')!==`Bearer ${secret}`)return NextResponse.json({error:'Unauthorized'},{status:401});
+ if (!isAuthorizedCronRequest(req)) return NextResponse.json({error:'Unauthorized'},{status:401});
  const now=new Date();
  const expenses=await prisma.expense.findMany({where:{receiptUrl:null,receiptDueAt:{lte:now},status:'ADVANCE_PAID_AWAITING_RECEIPT'},include:{user:true,team:true},orderBy:{receiptDueAt:'asc'},take:100});
  let sent=0;

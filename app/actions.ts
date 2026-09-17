@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { encryptBankDetail } from '@/lib/bank';
 import { createWiseBatchGroup, addWiseBatchTransfer, completeWiseBatchGroup, cancelWiseBatchGroup, createWiseQuote, createWiseRecipient, getWiseBatchGroup, getWiseTransfer, getWiseTransferRequirements, getWiseTransferDetails, cancelWiseTransfer, isWiseConfigured, validateWiseReference } from '@/lib/wise';
 import { decryptBankDetail } from '@/lib/bank';
+import { parseMoney, roundMoney, errorMessage } from '@/lib/money';
 import { deterministicWiseTransactionId, syncWisePaymentRunById } from '@/lib/wise-sync';
 
 function escapeHtml(value: string) { return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] || char)); }
@@ -16,7 +17,7 @@ function escapeHtml(value: string) { return value.replace(/[&<>"']/g, char => ({
 async function requireUser() {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect('/login');
-  return session.user as any;
+  return session.user;
 }
 
 async function getTeamApproverEmails(teamId: string) {
@@ -42,7 +43,7 @@ export async function submitExpense(formData: FormData) {
   const teamId = String(formData.get('teamId') || '');
   const date = String(formData.get('date') || '');
   const description = (formData.get('description') as string)?.trim();
-  const amount = parseFloat(String(formData.get('amount') || ''));
+  const amount = parseMoney(formData.get('amount'));
   const receiptUrl = String(formData.get('receiptUrl') || '') || null;
   const purchaseStatus = String(formData.get('purchaseStatus') || '') as 'ALREADY_PURCHASED' | 'NOT_PURCHASED';
   const paymentTiming = String(formData.get('paymentTiming') || '') as 'AFTER_PURCHASE' | 'ADVANCE';
@@ -51,7 +52,7 @@ export async function submitExpense(formData: FormData) {
   const hasBankDetails = !!(payoutUser?.bankAccountName && payoutUser.bankSortCode && payoutUser.bankAccountNumber);
   if (!hasBankDetails) throw new Error('Add your bank details before submitting an expense so you can be paid.');
   if (!teamId) throw new Error('Choose which team this expense is for.');
-  if (!description || !amount || amount <= 0) throw new Error('Add a description and an amount greater than zero.');
+  if (!description) throw new Error('Add a description.');
   if (!date || Number.isNaN(new Date(date).getTime())) throw new Error('Choose a valid date.');
   if (!['ALREADY_PURCHASED', 'NOT_PURCHASED'].includes(purchaseStatus)) throw new Error('Choose whether the item has already been purchased.');
   if (!['AFTER_PURCHASE', 'ADVANCE'].includes(paymentTiming)) throw new Error('Choose when you need the money.');
@@ -100,9 +101,9 @@ export async function updateExpense(formData: FormData) {
   const teamId = String(formData.get('teamId') || '');
   const date = String(formData.get('date') || '');
   const description = (formData.get('description') as string)?.trim();
-  const amount = parseFloat(String(formData.get('amount') || ''));
+  const amount = parseMoney(formData.get('amount'));
   if (!expenseId || !teamId) throw new Error('Expense not found.');
-  if (!description || !amount || amount <= 0) throw new Error('Add a description and an amount greater than zero.');
+  if (!description) throw new Error('Add a description.');
   if (!date || Number.isNaN(new Date(date).getTime())) throw new Error('Choose a valid date.');
   const expense = await prisma.expense.findFirst({ where: { id: expenseId, userId: user.id } });
   if (!expense) throw new Error('You can only edit your own expenses.');
@@ -195,10 +196,10 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
       // Wise batch. The approver should only have to fund the completed batch
       // in Wise; there is no web-app Review/Close step.
       await autoCompleteWiseBatchIfApprovalsAreComplete(user.id);
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Approval must not be rolled back because Wise preparation/finalisation failed.
       // The expense remains in its approved/ready state and the failure is logged.
-      wisePreparationError = error?.message || 'Wise payment preparation failed.';
+      wisePreparationError = errorMessage(error, 'Wise payment preparation failed.');
       console.error('Automatic Wise payment preparation/finalisation failed', { expenseId, error });
     }
   }
@@ -255,17 +256,17 @@ export async function markExpensePurchased(formData: FormData) {
   const expenseId = String(formData.get('expenseId') || '');
   const date = String(formData.get('purchaseDate') || '');
   const receiptUrl = String(formData.get('receiptUrl') || '') || null;
-  const actualAmount = parseFloat(String(formData.get('actualAmount') || ''));
+  const actualAmount = parseMoney(formData.get('actualAmount'));
   if (!expenseId || !date || Number.isNaN(new Date(date).getTime())) throw new Error('Choose a valid purchase date.');
   if (!receiptUrl) throw new Error('Upload the receipt before confirming the purchase.');
-  if (!actualAmount || actualAmount <= 0) throw new Error('Enter the actual amount shown on the receipt.');
+  
   const expense = await prisma.expense.findUnique({ where: { id: expenseId }, include: { team: true } });
   if (!expense || expense.userId !== user.id) throw new Error('Expense not found.');
   if (expense.status !== 'ADVANCE_PAID_AWAITING_RECEIPT') throw new Error('This expense is not waiting for its receipt.');
 
   if (expense.status === 'ADVANCE_PAID_AWAITING_RECEIPT') {
     const advance = expense.advanceAmount ?? expense.amount;
-    const difference = Number((advance - actualAmount).toFixed(2));
+    const difference = roundMoney(advance - actualAmount);
     let settlementStatus: 'SETTLED' | 'BALANCE_TO_RETURN' | 'ADDITIONAL_REIMBURSEMENT_REQUIRED';
     let settlementNote: string | null = null;
     if (difference === 0) {
@@ -740,7 +741,7 @@ async function autoCompleteWiseBatchIfApprovalsAreComplete(userId: string) {
   // the lease used to close the batch.
   try {
     await createWisePaymentRunForUser(user.id, user.isAdmin, approverEmail);
-  } catch (error: any) {
+  } catch (error: unknown) {
     // There may simply be nothing eligible to add. Do not treat that as a
     // failure: an existing open batch can still be completed below.
     if (!String(error?.message || '').toLowerCase().includes('no ready expenses')) throw error;
@@ -976,7 +977,7 @@ export async function createTeam(formData: FormData) {
   if (!user.isAdmin) throw new Error('Only admins can add teams.');
   const name = (formData.get('name') as string)?.trim();
   const approverEmails = [...new Set(formData.getAll('approverEmail').map(v => String(v).trim().toLowerCase()).filter(Boolean))];
-  const budgetTarget = parseFloat((formData.get('budgetTarget') as string) || '0') || 0;
+  const budgetTarget = parseMoney(formData.get('budgetTarget'), { min: 0, allowZero: true });
   if (!name) throw new Error('A team name is required.');
   if (!approverEmails.length || approverEmails.some(e => !e.includes('@'))) throw new Error('Add at least one valid approver email.');
   await prisma.team.create({ data: { name, approverEmails, budgetTarget } });
@@ -989,7 +990,7 @@ export async function updateTeam(formData: FormData) {
   const teamId = String(formData.get('teamId') || '');
   const name = (formData.get('name') as string)?.trim();
   const approverEmails = [...new Set(formData.getAll('approverEmail').map(v => String(v).trim().toLowerCase()).filter(Boolean))];
-  const budgetTarget = parseFloat((formData.get('budgetTarget') as string) || '0') || 0;
+  const budgetTarget = parseMoney(formData.get('budgetTarget'), { min: 0, allowZero: true });
   if (!teamId || !name) throw new Error('A team name is required.');
   if (!approverEmails.length || approverEmails.some(e => !e.includes('@'))) throw new Error('Add at least one valid approver email.');
   await prisma.team.update({ where: { id: teamId }, data: { name, approverEmails, budgetTarget } });

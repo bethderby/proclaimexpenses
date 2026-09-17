@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { decryptBankDetail } from '@/lib/bank';
 
 export async function GET(req:NextRequest){
- const session=await getServerSession(authOptions);if(!session?.user)return NextResponse.json({error:'Not signed in.'},{status:401});const user=session.user as any;if(!user.isAdmin&&!user.isApprover)return NextResponse.json({error:'Forbidden.'},{status:403});
+ const session=await getServerSession(authOptions);if(!session?.user)return NextResponse.json({error:'Not signed in.'},{status:401});const user=session.user;if(!user.isAdmin&&!user.isApprover)return NextResponse.json({error:'Forbidden.'},{status:403});
  const runId=new URL(req.url).searchParams.get('runId');if(!runId)return NextResponse.json({error:'runId is required.'},{status:400});
  const run=await prisma.paymentRun.findUnique({where:{id:runId},include:{expenses:{include:{user:true,team:true}}}});if(!run)return NextResponse.json({error:'Payment run not found.'},{status:404});
  let exportExpenses = run.expenses;

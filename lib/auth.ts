@@ -100,15 +100,15 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, user }) {
       if (session.user) {
-        (session.user as any).id = user.id;
+        session.user.id = user.id;
         const email = (user.email ?? '').toLowerCase();
         const dbUser = await prisma.user.findUnique({ where: { id: user.id }, select: { isAdmin: true } });
         const approverTeam = email
           ? await prisma.team.findFirst({ where: { approverEmails: { has: email } }, select: { id: true } })
           : null;
-        (session.user as any).isApprover = !!approverTeam;
+        session.user.isApprover = !!approverTeam;
         const envAdmins = (process.env.ADMIN_EMAILS ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
-        (session.user as any).isAdmin = !!dbUser?.isAdmin || envAdmins.includes(email);
+        session.user.isAdmin = !!dbUser?.isAdmin || envAdmins.includes(email);
       }
       return session;
     },

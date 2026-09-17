@@ -38,7 +38,7 @@ function MetricCard({
 }
 
 export default async function DashboardPage(){
- const session=await getServerSession(authOptions);if(!session?.user)redirect('/login');const user=session.user as any;
+ const session=await getServerSession(authOptions);if(!session?.user)redirect('/login');const user=session.user;
  const pendingWhere:any=user.isAdmin?{status:'PENDING'}:user.isApprover?{status:'PENDING',team:{approverEmails:{has:(user.email??'').toLowerCase()}}}:{status:'PENDING',userId:user.id};
  const [expenses,expenseCount,expenseTotal,pending,needsReceipt,ready]=await Promise.all([
   prisma.expense.findMany({where:{userId:user.id},include:{team:true},orderBy:{submittedAt:'desc'},take:5}),

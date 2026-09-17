@@ -14,7 +14,7 @@ const fmt=(n:number)=>`£${n.toFixed(2)}`;
 const toRow=(e:any)=>({id:e.id,date:e.date.toISOString(),description:e.description,amount:e.amount,teamId:e.teamId,teamName:e.team.name,receiptUrl:e.receiptUrl,status:e.status,purchaseStatus:e.purchaseStatus,paymentTiming:e.paymentTiming,receiptDueAt:e.receiptDueAt?.toISOString()||null,paymentStatus:e.paymentStatus,settlementStatus:e.settlementStatus,settlementNote:e.settlementNote,submittedAt:e.submittedAt.toISOString(),approvedAmount:e.approvedAmount,actualAmount:e.actualAmount,decidedAt:e.decidedAt?.toISOString()||null,decisionNote:e.decisionNote,relatedExpenseId:e.relatedExpenseId});
 
 export default async function ExpenseHistoryPage({searchParams}:{searchParams:{from?:string;to?:string;status?:string;expenseId?:string}}){
- const session=await getServerSession(authOptions);if(!session?.user)redirect('/login');const user=session.user as any;
+ const session=await getServerSession(authOptions);if(!session?.user)redirect('/login');const user=session.user;
  const status=typeof searchParams.status==='string'&&searchParams.status.trim()?searchParams.status:undefined;
  const expenseId=typeof searchParams.expenseId==='string'&&searchParams.expenseId.trim()?searchParams.expenseId:undefined;
  // A status filter (e.g. from the "Waiting for approval" card) can point at expenses

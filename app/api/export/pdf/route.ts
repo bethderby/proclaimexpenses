@@ -6,7 +6,7 @@ import { buildStatementPdf } from '@/lib/pdf';
 import { formatReportDate } from '@/lib/date';
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions); if (!session?.user) return NextResponse.json({error:'Not signed in.'},{status:401});
-  const user = session.user as any; if (!user.isAdmin) return NextResponse.json({error:'Forbidden.'},{status:403});
+  const user = session.user; if (!user.isAdmin) return NextResponse.json({error:'Forbidden.'},{status:403});
   const sp = new URL(req.url).searchParams; const teamId=sp.get('team'); const startValue=sp.get('start'); const endValue=sp.get('end');
   if (!startValue || !endValue) return NextResponse.json({error:'start and end are required.'},{status:400});
   const start=new Date(`${startValue}T00:00:00`), end=new Date(`${endValue}T23:59:59.999`); if (start>end) return NextResponse.json({error:'Invalid date range.'},{status:400});
