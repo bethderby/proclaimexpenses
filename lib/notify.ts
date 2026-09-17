@@ -1,9 +1,13 @@
 export function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] || char));
+  return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] || char));
 }
 
 export async function notify(to: string | string[], subject: string, html: string, text: string) {
-  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM) return;
+  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM) {
+    console.warn('Email notification skipped: RESEND_API_KEY or RESEND_FROM is not configured.');
+    return;
+  }
+
   try {
     const { Resend } = await import('resend');
     const resend = new Resend(process.env.RESEND_API_KEY);

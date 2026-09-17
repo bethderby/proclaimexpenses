@@ -118,9 +118,39 @@ export async function cancelExpense(formData: FormData) {
   const expenseId = String(formData.get('expenseId') || '');
   const expense = await prisma.expense.findUnique({ where: { id: expenseId } });
   if (!expense || expense.userId !== user.id) throw new Error('Expense not found.');
-  if (expense.status !== 'PENDING') throw new Error('This expense can no longer be cancelled.');
-  await prisma.expense.update({ where: { id: expenseId }, data: { status: 'CANCELLED' } });
-  revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard');
+
+  // A requester can cancel an expense while it is pending approval. A
+  // returned-to-approval expense is normally PENDING, but accept the legacy
+  // READY_TO_PAY shape only when it is explicitly marked as having come from
+  // a cancelled payment run. Never allow an ordinary approved expense to be
+  // cancelled by the requester.
+  const returnedToApproval = expense.wasInCancelledPaymentRun &&
+    expense.status === 'READY_TO_PAY' &&
+    expense.decisionNote === 'Previous approval was returned for approval again.';
+  if (expense.status !== 'PENDING' && !returnedToApproval) {
+    throw new Error('This expense can no longer be cancelled.');
+  }
+
+  await prisma.expense.update({
+    where: { id: expenseId },
+    data: {
+      status: 'CANCELLED',
+      paymentStatus: 'NOT_READY',
+      paymentRunId: null,
+      paymentReference: null,
+      wiseBatchGroupId: null,
+      wiseTransferId: null,
+      wiseStatus: null,
+      approvedAmount: null,
+      decidedAt: null,
+    },
+  });
+
+  revalidatePath('/dashboard/expenses');
+  revalidatePath('/dashboard/expense-history');
+  revalidatePath('/dashboard/approvals');
+  revalidatePath('/dashboard/payments');
+  revalidatePath('/dashboard');
 }
 
 export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'REJECTED', note: string) {
