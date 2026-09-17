@@ -57,7 +57,7 @@ export default function ExpenseForm({ teams, hasBankDetails }: { teams: { id: st
 
       <div><label className="field-label">Team</label><select name="teamId" required className="field-control">{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
       <div><label className="field-label">What's this expense for?</label><input name="description" required className="field-control" placeholder="e.g. Train tickets for conference"/></div>
-      <div><label className="field-label">Amount</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">£</span><input type="number" step="0.01" min="0.01" name="amount" required className="field-control h-10 pl-7 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/></div></div>
+      <div><label className="field-label">Amount</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">£</span><input type="number" step="0.01" min="0.01" name="amount" onWheel={(e) => e.currentTarget.blur()} required className="field-control h-10 pl-7 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/></div></div>
 
       <div>
         <p className="mb-2 block text-sm font-medium text-stone-700">Have you already bought this?</p>
