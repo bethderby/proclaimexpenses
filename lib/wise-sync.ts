@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { recordAuditEvent } from '@/lib/audit';
 import { getWiseBatchGroup, getWiseTransfer } from '@/lib/wise';
-import { notify, escapeHtml, renderEmail } from '@/lib/notify';
+import { notify, escapeHtml } from '@/lib/notify';
 
 export function deterministicWiseTransactionId(paymentRunId: string, expenseId: string) {
   const hash = crypto.createHash('sha256').update(`proclaim-payment-run:${paymentRunId}:expense:${expenseId}`).digest('hex');
@@ -60,7 +60,6 @@ export async function syncWisePaymentRunById(runId: string) {
   const expensesUrl = `${appUrl}/dashboard/expense-history`;
   const paidNotifications: { email: string; subject: string; html: string; text: string }[] = [];
   const failedNotifications: { email: string; subject: string; html: string; text: string }[] = [];
-  const cancelledNotifications: { email: string; subject: string; html: string; text: string }[] = [];
 
   await prisma.$transaction(async tx => {
     let nextStatus: 'WISE_OPEN' | 'WISE_PREPARED' | 'WISE_RECOVERY_REQUIRED' | 'COMPLETED' | 'CANCELLED' = 'WISE_RECOVERY_REQUIRED';
@@ -85,8 +84,11 @@ export async function syncWisePaymentRunById(runId: string) {
       const state = String(t.status || 'unknown');
       if (state === 'outgoing_payment_sent') {
         if (expense.paymentTiming === 'ADVANCE') {
-          await tx.expense.update({ where: { id: expense.id }, data: { status: 'ADVANCE_PAID_AWAITING_RECEIPT', paymentStatus: 'PAID', paidAt: new Date(), advanceAmount: expense.amount, settlementStatus: 'AWAITING_RECEIPT', receiptDueAt: new Date(Date.now()+7*24*60*60*1000), wiseStatus: state } });
-          if (expense.user.email) {
+          const claimed = await tx.expense.updateMany({
+            where: { id: expense.id, paymentStatus: { not: 'PAID' } },
+            data: { status: 'ADVANCE_PAID_AWAITING_RECEIPT', paymentStatus: 'PAID', paidAt: new Date(), advanceAmount: expense.amount, settlementStatus: 'AWAITING_RECEIPT', receiptDueAt: new Date(Date.now()+7*24*60*60*1000), wiseStatus: state },
+          });
+          if (claimed.count === 1 && expense.user.email) {
             paidNotifications.push({
               email: expense.user.email,
               subject: `Advance paid - £${expense.amount.toFixed(2)}`,
@@ -95,8 +97,11 @@ export async function syncWisePaymentRunById(runId: string) {
             });
           }
         } else {
-          await tx.expense.update({ where: { id: expense.id }, data: { status: 'PAID', paymentStatus: 'PAID', paidAt: new Date(), wiseStatus: state } });
-          if (expense.user.email) {
+          const claimed = await tx.expense.updateMany({
+            where: { id: expense.id, paymentStatus: { not: 'PAID' } },
+            data: { status: 'PAID', paymentStatus: 'PAID', paidAt: new Date(), wiseStatus: state },
+          });
+          if (claimed.count === 1 && expense.user.email) {
             paidNotifications.push({
               email: expense.user.email,
               subject: `Expense paid - £${expense.amount.toFixed(2)}`,
@@ -135,32 +140,19 @@ ${expensesUrl || ''}`,
     }
 
     if (batchCancelled) {
-      const byEmail = new Map<string, typeof refreshed>();
-      for (const expense of refreshed.filter(e => e.paymentStatus !== 'PAID' && e.status === 'PAYMENT_PENDING')) {
-        if (!expense.user.email) continue;
-        const email = expense.user.email.trim().toLowerCase();
-        if (!email) continue;
-        const existing = byEmail.get(email) ?? [];
-        existing.push(expense);
-        byEmail.set(email, existing);
-      }
-      for (const [email, expenses] of byEmail) {
-        const details = expenses.map(e => `£${e.amount.toFixed(2)} - ${e.description}`).join('\n');
-        const { html, text } = renderEmail({
-          heading: 'Payment batch cancelled',
-          intro: 'Your payment batch was cancelled, so the affected expense(s) have been returned to Pending and must be approved again before they can be paid.',
-          plainTextExtra: `Expenses returned to approval:\n${details}`,
-          ctaPath: '/dashboard/expense-history',
-          ctaLabel: 'View expenses',
-        });
-        cancelledNotifications.push({ email, subject: 'Payment batch cancelled - approval required again', html, text });
-      }
       await tx.expense.updateMany({
         where: { paymentRunId: runId, paymentStatus: { not: 'PAID' } },
         data: {
-          paymentRunId: null, paymentStatus: 'NOT_READY', status: 'PENDING', approvedAmount: null,
-          decisionNote: 'Payment run was cancelled. Approval is required again.', decidedAt: null,
-          paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null,
+          paymentRunId: null,
+          paymentStatus: 'NOT_READY',
+          status: 'PENDING',
+          approvedAmount: null,
+          decisionNote: 'Payment run was cancelled. Approval is required again.',
+          decidedAt: null,
+          paymentReference: null,
+          wiseBatchGroupId: null,
+          wiseTransferId: null,
+          wiseStatus: null,
         },
       });
     }
@@ -190,10 +182,6 @@ ${expensesUrl || ''}`,
   }
 
   for (const n of failedNotifications) {
-    await notify(n.email, n.subject, n.html, n.text);
-  }
-
-  for (const n of cancelledNotifications) {
     await notify(n.email, n.subject, n.html, n.text);
   }
 
