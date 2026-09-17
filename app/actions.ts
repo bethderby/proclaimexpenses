@@ -972,7 +972,19 @@ export async function cancelPaymentRun(formData: FormData) {
 
   await prisma.$transaction(async tx => {
     await tx.paymentRun.update({ where: { id: runId }, data: { status: 'CANCELLED', wiseStatus: 'cancelled', preparationKey: null } });
-    await tx.expense.updateMany({ where: { paymentRunId: runId, status: 'PAYMENT_PENDING' }, data: { paymentRunId: null, paymentStatus: 'READY', status: 'READY_TO_PAY', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null, wasInCancelledPaymentRun: true } });
+    await tx.expense.updateMany({ where: { paymentRunId: runId, status: 'PAYMENT_PENDING' }, data: {
+          paymentRunId: null,
+          paymentStatus: 'NOT_READY',
+          status: 'PENDING',
+          approvedAmount: null,
+          decisionNote: 'Payment run was cancelled. Approval is required again.',
+          decidedAt: null,
+          paymentReference: null,
+          wiseBatchGroupId: null,
+          wiseTransferId: null,
+          wiseStatus: null,
+          wasInCancelledPaymentRun: true,
+        } });
   });
   } finally {
     if (batchLeaseToken) await releaseWiseBatchLease(batchLeaseToken);

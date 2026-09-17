@@ -131,7 +131,18 @@ ${expensesUrl || ''}`,
     if (batchCancelled) {
       await tx.expense.updateMany({
         where: { paymentRunId: runId, paymentStatus: { not: 'PAID' } },
-        data: { paymentRunId: null, paymentStatus: 'READY', status: 'READY_TO_PAY', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null },
+        data: {
+          paymentRunId: null,
+          paymentStatus: 'NOT_READY',
+          status: 'PENDING',
+          approvedAmount: null,
+          decisionNote: 'Payment run was cancelled. Approval is required again.',
+          decidedAt: null,
+          paymentReference: null,
+          wiseBatchGroupId: null,
+          wiseTransferId: null,
+          wiseStatus: null,
+        },
       });
     }
   });
