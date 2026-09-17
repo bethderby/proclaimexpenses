@@ -39,11 +39,13 @@ export default function ExpenseHistoryTable({expenses,teams,openExpense}:{expens
     <span className={`min-w-0 border-slate-100 md:border-b md:px-2 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}>
       <span className="block truncate text-sm font-semibold leading-5 text-slate-950">{e.description}</span>
       <span className="mt-0.5 hidden truncate text-xs text-slate-500 md:block">{modeLabel(e.purchaseStatus,e.paymentTiming)}</span>
-      {e.receiptUrl&&<span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-[#C99600] md:hidden"><ReceiptText size={12}/> Receipt</span>}
       <span className="mt-1 flex items-center gap-2 md:hidden"><StatusPill status={e.status}/></span>
     </span>
     <span className={`grid grid-cols-[1fr] items-center gap-1.5 border-slate-100 text-right text-sm font-bold leading-5 text-slate-950 md:grid-cols-[1fr_16px] md:border-b md:px-2 md:py-3 md:text-base md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}>
-      <span className="text-right">{fmt(e.amount)}</span>
+      <span className="flex flex-col items-end gap-0.5 md:contents">
+        <span className="text-right">{fmt(e.amount)}</span>
+        {e.receiptUrl&&<span className="inline-flex items-center gap-1 text-[10px] font-medium leading-4 text-[#C99600] md:hidden"><ReceiptText size={11}/> Receipt</span>}
+      </span>
       <span className="hidden md:flex md:justify-center">{e.receiptUrl&&<ReceiptText size={13} className="text-[#C99600]" aria-label="Receipt attached"/>}</span>
     </span>
     <span className={`hidden items-center whitespace-nowrap border-slate-100 md:flex md:border-b md:px-2 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}><StatusPill status={e.status}/></span>
