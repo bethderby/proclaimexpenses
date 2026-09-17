@@ -689,10 +689,7 @@ export async function createWisePaymentRun() {
 
   const approverEmail = (user.email ?? '').toLowerCase();
   const run = await createWisePaymentRunForUser(user.id, user.isAdmin, approverEmail);
-  if (run?.id) {
-    await closeWisePaymentRunById(run.id);
-  }
-  await recordAuditEvent({ actor: user, action: 'PAYMENT_RUN_CREATED', entityType: 'PAYMENT_RUN', entityId: run?.id ?? null, paymentRunId: run?.id ?? null, summary: run?.id ? `Wise payment run ${run.id} prepared` : 'Wise payment run preparation requested', metadata: { runId: run?.id ?? null } });
+  await recordAuditEvent({ actor: user, action: 'PAYMENT_RUN_CREATED', entityType: 'PAYMENT_RUN', entityId: run?.id ?? null, paymentRunId: run?.id ?? null, summary: run?.id ? `Wise payment batch ${run.id} opened` : 'Wise payment batch opening requested', metadata: { runId: run?.id ?? null, status: run?.status ?? null } });
   revalidatePath('/dashboard/payments');
   revalidatePath('/dashboard/expenses');
   revalidatePath('/dashboard/expense-history');
