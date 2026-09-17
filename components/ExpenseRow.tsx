@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Paperclip, Pencil, XCircle } from 'lucide-react';
+import { ReceiptText, Pencil, XCircle } from 'lucide-react';
 import EditExpenseForm from './EditExpenseForm';
 import StatusPill from './StatusPill';
 import MarkPurchasedForm from './MarkPurchasedForm';
@@ -52,7 +52,7 @@ export default function ExpenseRow({ expense, teams, variant }:{ expense:{id:str
      <span className="truncate text-sm text-slate-500">{expense.teamName}</span>
      <span className="text-right text-sm font-semibold text-slate-950">{fmt(expense.amount)}</span>
      <div className="flex justify-end">
-       {expense.receiptUrl ? <a href={`/api/receipts/${expense.id}`} target="_blank" rel="noreferrer" title="View receipt" aria-label="View receipt" className="inline-grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100"><Paperclip size={15}/></a> : <span className="text-[11px] text-slate-400">No receipt</span>}
+       {expense.receiptUrl ? <a href={`/api/receipts/${expense.id}`} target="_blank" rel="noreferrer" title="View receipt" aria-label="View receipt" className="inline-grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100"><ReceiptText size={15}/></a> : <span className="text-[11px] text-slate-400">No receipt</span>}
        {canEdit && <button onClick={()=>setEditing(true)} title="Edit" aria-label="Edit expense" className="ml-1 inline-grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100"><Pencil size={14}/></button>}
      </div>
    </div>
@@ -65,7 +65,7 @@ export default function ExpenseRow({ expense, teams, variant }:{ expense:{id:str
          <p className="text-[11px] font-medium text-slate-500">{fmtDate(expense.date)}</p>
          <div className="mt-0.5 flex min-w-0 items-center gap-2">
            <p className="truncate text-sm font-semibold text-slate-950">{expense.description}</p>
-           {expense.receiptUrl && <a href={`/api/receipts/${expense.id}`} target="_blank" rel="noreferrer" title="View receipt" aria-label="View receipt" className="shrink-0 text-slate-500"><Paperclip size={15}/></a>}
+           {expense.receiptUrl && <a href={`/api/receipts/${expense.id}`} target="_blank" rel="noreferrer" title="View receipt" aria-label="View receipt" className="shrink-0 text-slate-500"><ReceiptText size={15}/></a>}
          </div>
        </div>
        <p className="shrink-0 text-sm font-bold text-slate-950">{fmt(expense.amount)}</p>

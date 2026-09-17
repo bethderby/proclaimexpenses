@@ -10,7 +10,6 @@ import { STATUS_META } from '@/components/StatusPill';
 
 const isoFirstOfMonth=()=>{const now=new Date();return new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10)};
 const isoToday=()=>new Date().toISOString().slice(0,10);
-const EARLIEST=`2000-01-01`;
 const fmt=(n:number)=>`£${n.toFixed(2)}`;
 const toRow=(e:any)=>({id:e.id,date:e.date.toISOString(),description:e.description,amount:e.amount,teamId:e.teamId,teamName:e.team.name,receiptUrl:e.receiptUrl,status:e.status,purchaseStatus:e.purchaseStatus,paymentTiming:e.paymentTiming,receiptDueAt:e.receiptDueAt?.toISOString()||null,paymentStatus:e.paymentStatus,settlementStatus:e.settlementStatus,settlementNote:e.settlementNote,submittedAt:e.submittedAt.toISOString(),approvedAmount:e.approvedAmount,actualAmount:e.actualAmount,decidedAt:e.decidedAt?.toISOString()||null,decisionNote:e.decisionNote,relatedExpenseId:e.relatedExpenseId});
 
@@ -19,8 +18,12 @@ export default async function ExpenseHistoryPage({searchParams}:{searchParams:{f
  const status=typeof searchParams.status==='string'&&searchParams.status.trim()?searchParams.status:undefined;
  const expenseId=typeof searchParams.expenseId==='string'&&searchParams.expenseId.trim()?searchParams.expenseId:undefined;
  // A status filter (e.g. from the "Waiting for approval" card) can point at expenses
- // logged outside the current month, so default to an unbounded range in that case.
- const from=searchParams.from||(status?EARLIEST:isoFirstOfMonth()),to=searchParams.to||isoToday();const fromDate=new Date(`${from}T00:00:00`),toDate=new Date(`${to}T23:59:59.999`);
+ // logged outside the current month. Rather than defaulting to an arbitrary/fake
+ // earliest date, only apply the date range the person can actually see/edit: their
+ // own oldest expense if there's no explicit from/to yet.
+ const needsUnboundedDefault=Boolean(status)&&!searchParams.from;
+ const earliest=needsUnboundedDefault?await prisma.expense.aggregate({where:{userId:user.id},_min:{date:true}}):null;
+ const from=searchParams.from||(needsUnboundedDefault?(earliest?._min.date?.toISOString().slice(0,10)||isoFirstOfMonth()):isoFirstOfMonth()),to=searchParams.to||isoToday();const fromDate=new Date(`${from}T00:00:00`),toDate=new Date(`${to}T23:59:59.999`);
  const [teams,expenses,openExpense]=await Promise.all([
   prisma.team.findMany({orderBy:{name:'asc'}}),
   prisma.expense.findMany({where:{userId:user.id,date:{gte:fromDate,lte:toDate},...(status?{status:status as any}:{})},include:{team:true},orderBy:[{date:'desc'},{submittedAt:'desc'},{id:'desc'}]}),
