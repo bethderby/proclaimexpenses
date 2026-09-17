@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
 type AuditActor = {
@@ -45,7 +46,7 @@ export function auditEventData(input: AuditEventInput) {
     teamId: input.teamId ?? null,
     targetUserId: input.targetUserId ?? null,
     summary: input.summary,
-    metadata: sanitiseAuditMetadata(input.metadata),
+    metadata: input.metadata == null ? Prisma.JsonNull : input.metadata,
   };
 }
 
