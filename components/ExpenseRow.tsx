@@ -10,13 +10,13 @@ const fmt=(n:number)=>`£${n.toFixed(2)}`;
 const fmtDate=(iso:string)=>new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
 const modeLabel=(status:string,timing:string)=>status==='ALREADY_PURCHASED'?'Already purchased':timing==='ADVANCE'?'Advance requested':'Pay personally then reimburse';
 
-export default function ExpenseRow({ expense, teams, variant }:{ expense:{id:string;date:string;description:string;amount:number;teamId:string;teamName:string;receiptUrl:string|null;status:string;purchaseStatus:string; paymentTiming:string; receiptDueAt:string|null;paymentStatus:string;settlementStatus:string;settlementNote:string|null}; teams:{id:string;name:string}[]; variant:'desktop'|'mobile' }){
+export default function ExpenseRow({ expense, teams, variant }:{ expense:{id:string;date:string;description:string;amount:number;teamId:string;teamName:string;receiptUrl:string|null;status:string;purchaseStatus:string; paymentTiming:string; receiptDueAt:string|null;paymentStatus:string;settlementStatus:string;settlementNote:string|null;relatedExpenseId?:string|null}; teams:{id:string;name:string}[]; variant:'desktop'|'mobile' }){
  const [editing,setEditing]=useState(false);
  if(editing)return <div className="border-b border-slate-100 bg-slate-50/60 p-3"><EditExpenseForm expense={{id:expense.id,date:expense.date,description:expense.description,amount:expense.amount,teamId:expense.teamId}} teams={teams} onDone={()=>setEditing(false)}/></div>;
 
  const needsPurchaseAction = expense.status==='ADVANCE_PAID_AWAITING_RECEIPT';
- const canEdit = expense.status==='PENDING';
- const canCancel = expense.status==='PENDING';
+ const canEdit = expense.status==='PENDING' && !expense.relatedExpenseId;
+ const canCancel = expense.status==='PENDING' && !expense.relatedExpenseId;
  const hasActions = needsPurchaseAction || canEdit || canCancel;
  const settlementTone = expense.settlementStatus==='BALANCE_TO_RETURN' ? 'bg-amber-50 text-amber-800 border border-amber-200' : expense.settlementStatus==='ADDITIONAL_REIMBURSEMENT_REQUIRED' ? 'bg-[#FFF8E1] text-[#A97900] border border-[#F3D36A]' : '';
 

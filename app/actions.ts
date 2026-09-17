@@ -107,6 +107,7 @@ export async function updateExpense(formData: FormData) {
   const expense = await prisma.expense.findFirst({ where: { id: expenseId, userId: user.id } });
   if (!expense) throw new Error('You can only edit your own expenses.');
   if (expense.status !== 'PENDING') throw new Error('Only expenses still awaiting approval can be edited.');
+  if (expense.relatedExpenseId) throw new Error('Additional reimbursements created from an advance cannot be edited by the requester.');
   const team = await prisma.team.findUnique({ where: { id: teamId } });
   if (!team) throw new Error('That team no longer exists.');
   await prisma.expense.update({ where: { id: expenseId }, data: { date: new Date(date), description, amount, teamId } });
@@ -127,6 +128,9 @@ export async function cancelExpense(formData: FormData) {
   const returnedToApproval = expense.wasInCancelledPaymentRun &&
     expense.status === 'READY_TO_PAY' &&
     expense.decisionNote === 'Previous approval was returned for approval again.';
+  if (expense.relatedExpenseId) {
+    throw new Error('Additional reimbursements created from an advance cannot be cancelled by the requester. An admin must reject them if needed.');
+  }
   if (expense.status !== 'PENDING' && !returnedToApproval) {
     throw new Error('This expense can no longer be cancelled.');
   }
@@ -160,6 +164,7 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
   const email = (user.email ?? '').toLowerCase();
   const isTeamApprover = !!email && expense.team.approverEmails.some(e => e.toLowerCase() === email);
   if (!user.isAdmin && !isTeamApprover) throw new Error("Only this team's configured approver can decide this expense.");
+  if (expense.relatedExpenseId && decision === 'REJECTED' && !user.isAdmin) throw new Error('Only an admin can reject an additional reimbursement created from an advance.');
   if (expense.status !== 'PENDING') throw new Error('This expense has already been decided.');
   if (decision === 'APPROVED' && expense.purchaseStatus === 'ALREADY_PURCHASED' && !expense.receiptUrl) throw new Error('A receipt is required before an already-purchased expense can be approved.');
 
@@ -622,7 +627,7 @@ export async function resetExpenseToPending(formData: FormData) {
 
   const email = (user.email ?? '').toLowerCase();
   const isTeamApprover = !!email && expense.team.approverEmails.some((approver) => approver.toLowerCase() === email);
-  if (!user.isAdmin && !isTeamApprover) throw new Error("Only this team's configured approver or an admin can return this expense for approval.");
+  if (!user.isAdmin) throw new Error('Only an admin can return an expense for approval.');
   if (expense.status !== 'READY_TO_PAY') throw new Error('Only an approved expense that is ready to pay can be returned for approval.');
   if (expense.paymentRunId || expense.wiseTransferId || expense.wiseBatchGroupId) {
     throw new Error('This expense is already in a Wise payment run. Cancel that run first, then return the expense for approval.');

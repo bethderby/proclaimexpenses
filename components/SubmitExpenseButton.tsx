@@ -7,6 +7,7 @@ export default function SubmitExpenseButton({ busy, disabled: externallyDisabled
   const { pending } = useFormStatus();
   const [pressed, setPressed] = useState(false);
   const disabled = pending || busy || !!externallyDisabled;
+  const receiptRequired = !!externallyDisabled && !pending && !busy;
 
   useEffect(() => {
     if (!pending && !busy && pressed) {
@@ -16,17 +17,18 @@ export default function SubmitExpenseButton({ busy, disabled: externallyDisabled
   }, [pending, busy, pressed]);
 
   const active = disabled || pressed;
+  const showSpinner = pending || busy || (pressed && !receiptRequired);
 
   return (
     <button
       type="submit"
       disabled={disabled}
-      aria-busy={disabled}
+      aria-busy={showSpinner}
       onClick={() => setPressed(true)}
-      className={`action-button w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:bg-[#C99600] disabled:opacity-100 ${active ? 'action-button-pressed' : ''}`}
+      className={`action-button w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-[#C99600] disabled:opacity-100 ${active ? 'action-button-pressed' : ''}`}
     >
-      {disabled && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
-      {pending ? 'Submitting…' : busy ? 'Uploading receipt…' : externallyDisabled ? 'Receipt required' : pressed ? 'Submitting…' : 'Submit expense'}
+      {showSpinner && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
+      {pending ? 'Submitting…' : busy ? 'Uploading receipt…' : receiptRequired ? 'Add receipt to submit' : pressed ? 'Submitting…' : 'Submit expense'}
     </button>
   );
 }
