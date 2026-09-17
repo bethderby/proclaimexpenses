@@ -12,17 +12,17 @@ const modeLabel=(status:string,timing:string)=>status==='ALREADY_PURCHASED'?'Alr
 
 type Expense={id:string;date:string;description:string;amount:number;teamId:string;teamName:string;receiptUrl:string|null;status:string;purchaseStatus:string;paymentTiming:string;receiptDueAt:string|null;paymentStatus:string;settlementStatus:string;settlementNote:string|null;submittedAt:string;approvedAmount:number|null;actualAmount:number|null;decidedAt:string|null;decisionNote:string|null;relatedExpenseId:string|null;};
 
-export default function ExpenseHistoryTable({expenses,teams}:{expenses:Expense[];teams:{id:string;name:string}[]}){
+export default function ExpenseHistoryTable({expenses,teams,initialExpenseId}:{expenses:Expense[];teams:{id:string;name:string}[];initialExpenseId?:string}){
  const [selected,setSelected]=useState<Expense|null>(null);
  const [editing,setEditing]=useState(false);
  const close=()=>{setSelected(null);setEditing(false)};
  useEffect(()=>{
-  const expenseId=new URLSearchParams(window.location.search).get('expenseId');
+  const expenseId=initialExpenseId ?? new URLSearchParams(window.location.search).get('expenseId');
   if(expenseId && !selected){
    const match=expenses.find(e=>e.id===expenseId);
    if(match) setSelected(match);
   }
- },[expenses,selected]);
+ },[expenses,selected,initialExpenseId]);
  useEffect(()=>{
   if(!selected) return;
   const previousOverflow=document.body.style.overflow;
