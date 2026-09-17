@@ -611,22 +611,56 @@ export async function completeWisePaymentRun(formData: FormData) {
   try {
     const run = await prisma.paymentRun.findUnique({ where: { id: runId }, include: { expenses: { include: { team: true } } } });
     if (!run) throw new Error('Payment run not found.');
-    if (run.status !== 'WISE_OPEN' || !run.wiseBatchGroupId) throw new Error('This payment batch is not open for completion.');
+    if (run.status !== 'WISE_OPEN' || !run.wiseBatchGroupId) throw new Error('This payment batch is not open for review.');
     if (!user.isAdmin) {
       const email = (user.email ?? '').toLowerCase();
       const allowed = run.expenses.some(e => e.team.approverEmails.some(a => a.toLowerCase() === email));
       if (!allowed) throw new Error('You are not authorised to close this payment batch.');
     }
 
-    const batch = await getWiseBatchGroup(run.wiseBatchGroupId);
+    // A review is the single intentional point at which the open batch is
+    // closed. Before closing it, pull in any eligible approved expenses that
+    // have not yet been added to a payment run. This means the approver does
+    // not need a separate Prepare step and we do not accidentally close a
+    // batch while an approved expense is still waiting.
+    const readyWhere: any = user.isAdmin
+      ? { paymentStatus: 'READY', paymentRunId: null }
+      : {
+          paymentStatus: 'READY',
+          paymentRunId: null,
+          team: { approverEmails: { has: (user.email ?? '').toLowerCase() } },
+        };
+    const readyExpenses = await prisma.expense.findMany({
+      where: readyWhere,
+      include: { user: true },
+      orderBy: { submittedAt: 'asc' },
+    });
+    const eligibleReadyIds = readyExpenses
+      .filter(e => e.user.bankAccountName && e.user.bankSortCode && e.user.bankAccountNumber)
+      .map(e => e.id);
+    if (eligibleReadyIds.length) {
+      await addExpensesToOpenWiseBatch(eligibleReadyIds, user.id);
+    }
+
+    // Re-read the run because the batch may have just received additional
+    // transfers during the review step.
+    const refreshedRun = await prisma.paymentRun.findUnique({
+      where: { id: runId },
+      include: { expenses: { include: { team: true } } },
+    });
+    if (!refreshedRun || refreshedRun.status !== 'WISE_OPEN' || !refreshedRun.wiseBatchGroupId) {
+      throw new Error('This payment batch is no longer open for review.');
+    }
+
+    const batch = await getWiseBatchGroup(refreshedRun.wiseBatchGroupId);
     const batchStatus = String(batch.status || '').toUpperCase();
     if (batchStatus === 'COMPLETED') {
-      await prisma.paymentRun.update({ where: { id: run.id }, data: { status: 'WISE_PREPARED', wiseStatus: 'COMPLETED', exportedAt: new Date() } });
+      await prisma.paymentRun.update({ where: { id: refreshedRun.id }, data: { status: 'WISE_PREPARED', wiseStatus: 'COMPLETED', exportedAt: new Date() } });
     } else if (batchStatus === 'NEW') {
-      const completed = await completeWiseBatchGroup(run.wiseBatchGroupId, Number(batch.version));
+      const completed = await completeWiseBatchGroup(refreshedRun.wiseBatchGroupId, Number(batch.version));
       await prisma.$transaction(async tx => {
-        await tx.paymentRun.update({ where: { id: run.id }, data: { status: 'WISE_PREPARED', wiseStatus: String(completed.status || 'COMPLETED'), exportedAt: new Date() } });
-        await tx.expense.updateMany({ where: { paymentRunId: run.id }, data: { wiseStatus: 'prepared' } });
+        await tx.paymentRun.update({ where: { id: refreshedRun.id }, data: { status: 'WISE_PREPARED', wiseStatus: String(completed.status || 'COMPLETED'), exportedAt: new Date() } });
+        await tx.expense.updateMany({ where: { paymentRunId: refreshedRun.id }, data: { wiseStatus: 'prepared' } });
       });
     } else {
       throw new Error(`Wise reports this batch as ${batchStatus.toLowerCase()}, so it cannot be completed here.`);
