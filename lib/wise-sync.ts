@@ -24,7 +24,12 @@ export async function syncWisePaymentRunById(runId: string) {
   // Recover any transfer that Wise created successfully but Proclaim did not
   // get a chance to persist before the request failed. The deterministic
   // customerTransactionId lets us map it back to the exact expense.
-  const recovered = new Map<string, any>();
+  type WiseTransferSummary = {
+    id: string | number;
+    status?: string;
+    customerTransactionId?: string;
+  };
+  const recovered = new Map<string, WiseTransferSummary>();
   for (const transfer of batchTransfers) {
     const customerTransactionId = String(transfer.customerTransactionId || '');
     const expense = run.expenses.find(e => deterministicWiseTransactionId(run.id, e.id) === customerTransactionId);

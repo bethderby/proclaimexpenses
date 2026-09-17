@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import * as XLSX from 'xlsx';
+import { Prisma } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { formatReportDate } from '@/lib/date';
@@ -8,9 +9,9 @@ import { formatReportDate } from '@/lib/date';
 export async function GET(req:NextRequest){
  const session=await getServerSession(authOptions);if(!session?.user)return NextResponse.json({error:'Not signed in.'},{status:401});
  const user=session.user;if(!user.isAdmin)return NextResponse.json({error:'Forbidden.'},{status:403});
- const sp=new URL(req.url).searchParams;const startValue=sp.get('start');const endValue=sp.get('end');const teamId=sp.get('team');let dateFilter:any=undefined;
+ const sp=new URL(req.url).searchParams;const startValue=sp.get('start');const endValue=sp.get('end');const teamId=sp.get('team');let dateFilter:Prisma.DateTimeFilter|undefined=undefined;
  if(startValue&&endValue){const start=new Date(`${startValue}T00:00:00`),end=new Date(`${endValue}T23:59:59.999`);if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime())||start>end)return NextResponse.json({error:'Invalid date range.'},{status:400});dateFilter={gte:start,lt:new Date(end.getTime()+1)}}
- const where:any={status:{notIn:['CANCELLED','REJECTED','PAYMENT_FAILED']},paymentStatus:{not:'FAILED'},...(dateFilter?{date:dateFilter}:{}),...(teamId?{teamId}: {})};
+ const where:Prisma.ExpenseWhereInput={status:{notIn:['CANCELLED','REJECTED','PAYMENT_FAILED']},paymentStatus:{not:'FAILED'},...(dateFilter?{date:dateFilter}:{}),...(teamId?{teamId}: {})};
  const expenses=await prisma.expense.findMany({where,include:{team:true,user:true},orderBy:{date:'desc'}});
  const rows=expenses.map(e=>({Date:formatReportDate(e.date),Team:e.team.name,Employee:e.user.name??'',Email:e.user.email??'',Description:e.description,Amount:Number(e.amount),'Purchase status':e.purchaseStatus,'Payment timing':e.paymentTiming,Status:e.status,'Has receipt':e.receiptUrl?'Yes':'No','Payment status':e.paymentStatus,'Payment run':e.paymentReference??'','Settlement status':e.settlementStatus==='NOT_APPLICABLE'?'':e.settlementStatus,'Settlement note':e.settlementNote??''}));
  const paymentRows=expenses.filter(e=>e.status==='READY_TO_PAY'&&e.user.bankSortCode&&e.user.bankAccountNumber).map(e=>({'Account name':e.user.bankAccountName??'','Sort code':e.user.bankSortCode??'','Account number':e.user.bankAccountNumber??'',Amount:Number(e.amount),Reference:e.paymentReference??`EXP-${e.id.slice(-8).toUpperCase()}`,Employee:e.user.name??e.user.email??'',Team:e.team.name}));

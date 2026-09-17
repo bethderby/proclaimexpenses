@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { XCircle } from 'lucide-react';
+import { Prisma, ExpenseStatus } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import DateRangeFilter from '@/components/DateRangeFilter';
@@ -11,7 +12,8 @@ import { STATUS_META } from '@/components/StatusPill';
 const isoFirstOfMonth=()=>{const now=new Date();return new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10)};
 const isoToday=()=>new Date().toISOString().slice(0,10);
 const fmt=(n:number)=>`£${n.toFixed(2)}`;
-const toRow=(e:any)=>({id:e.id,date:e.date.toISOString(),description:e.description,amount:Number(e.amount),teamId:e.teamId,teamName:e.team.name,receiptUrl:e.receiptUrl,status:e.status,purchaseStatus:e.purchaseStatus,paymentTiming:e.paymentTiming,receiptDueAt:e.receiptDueAt?.toISOString()||null,paymentStatus:e.paymentStatus,settlementStatus:e.settlementStatus,settlementNote:e.settlementNote,submittedAt:e.submittedAt.toISOString(),approvedAmount:e.approvedAmount==null?null:Number(e.approvedAmount),actualAmount:e.actualAmount==null?null:Number(e.actualAmount),decidedAt:e.decidedAt?.toISOString()||null,decisionNote:e.decisionNote,relatedExpenseId:e.relatedExpenseId});
+type ExpenseHistoryRow = Prisma.ExpenseGetPayload<{ include: { team: true } }>;
+const toRow=(e:ExpenseHistoryRow)=>({id:e.id,date:e.date.toISOString(),description:e.description,amount:Number(e.amount),teamId:e.teamId,teamName:e.team.name,receiptUrl:e.receiptUrl,status:e.status,purchaseStatus:e.purchaseStatus,paymentTiming:e.paymentTiming,receiptDueAt:e.receiptDueAt?.toISOString()||null,paymentStatus:e.paymentStatus,settlementStatus:e.settlementStatus,settlementNote:e.settlementNote,submittedAt:e.submittedAt.toISOString(),approvedAmount:e.approvedAmount==null?null:Number(e.approvedAmount),actualAmount:e.actualAmount==null?null:Number(e.actualAmount),decidedAt:e.decidedAt?.toISOString()||null,decisionNote:e.decisionNote,relatedExpenseId:e.relatedExpenseId});
 
 export default async function ExpenseHistoryPage({searchParams}:{searchParams:{from?:string;to?:string;status?:string;expenseId?:string}}){
  const session=await getServerSession(authOptions);if(!session?.user)redirect('/login');const user=session.user;
@@ -26,7 +28,7 @@ export default async function ExpenseHistoryPage({searchParams}:{searchParams:{f
  const from=searchParams.from||(needsUnboundedDefault?(earliest?._min.date?.toISOString().slice(0,10)||isoFirstOfMonth()):isoFirstOfMonth()),to=searchParams.to||isoToday();const fromDate=new Date(`${from}T00:00:00`),toDate=new Date(`${to}T23:59:59.999`);
  const [teams,expenses,openExpense]=await Promise.all([
   prisma.team.findMany({orderBy:{name:'asc'}}),
-  prisma.expense.findMany({where:{userId:user.id,date:{gte:fromDate,lte:toDate},...(status?{status:status as any}:{})},include:{team:true},orderBy:[{date:'desc'},{submittedAt:'desc'},{id:'desc'}]}),
+  prisma.expense.findMany({where:{userId:user.id,date:{gte:fromDate,lte:toDate},...(status?{status:status as ExpenseStatus}:{})},include:{team:true},orderBy:[{date:'desc'},{submittedAt:'desc'},{id:'desc'}]}),
   expenseId?prisma.expense.findFirst({where:{id:expenseId,userId:user.id},include:{team:true}}):Promise.resolve(null),
  ]);
  const total=expenses.reduce((s,e)=>s+Number(e.amount),0);

@@ -6,6 +6,17 @@ import { recordAuditEvent } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 
+// Minimal shape of a Wise "transfers#state-change" webhook delivery - we only
+// ever read these fields, so this isn't a full schema of Wise's payload.
+type WiseWebhookEvent = {
+  event_type?: string;
+  data?: {
+    resource?: {
+      id?: string | number;
+    };
+  };
+};
+
 export async function POST(req: NextRequest) {
   // Signature must be checked against the exact raw body - read text(),
   // never req.json() first, or re-serialization will break verification.
@@ -23,7 +34,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ status: 'ok' });
   }
 
-  let event: any;
+  let event: WiseWebhookEvent;
   try {
     event = JSON.parse(rawBody);
   } catch {

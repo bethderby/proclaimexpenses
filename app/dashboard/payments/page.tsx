@@ -1,5 +1,6 @@
 import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
+import { Prisma, PaymentRunStatus } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { PrepareWiseButton, PaymentRunActions } from './PaymentRunActions';
@@ -14,13 +15,13 @@ const runStatusLabel=(status:string)=>({DRAFT:'Draft',WISE_OPEN:'Open batch',WIS
 const money=(n:number)=>`£${n.toFixed(2)}`;
 export default async function PaymentsPage({searchParams}:{searchParams:{from?:string;to?:string;status?:string}}){
  const session=await getServerSession(authOptions); if(!session?.user) redirect('/login'); const user=session.user; if(!user.isAdmin&&!user.isApprover) redirect('/dashboard');
- const readyWhere:any=user.isAdmin?{paymentStatus:'READY'}:{paymentStatus:'READY',team:{approverEmails:{has:(user.email??'').toLowerCase()}}};
+ const readyWhere:Prisma.ExpenseWhereInput=user.isAdmin?{paymentStatus:'READY'}:{paymentStatus:'READY',team:{approverEmails:{has:(user.email??'').toLowerCase()}}};
  const from=searchParams.from||isoFirstOfMonth(),to=searchParams.to||isoToday();
  const fromDate=new Date(`${from}T00:00:00`),toDate=new Date(`${to}T23:59:59.999`);
  const status=searchParams.status||'ALL';
- const runWhere:any={createdAt:{gte:fromDate,lte:toDate}};
+ const runWhere:Prisma.PaymentRunWhereInput={createdAt:{gte:fromDate,lte:toDate}};
  if(!user.isAdmin) runWhere.expenses={some:{team:{approverEmails:{has:(user.email??'').toLowerCase()}}}};
- if(status!=='ALL') runWhere.status=status;
+ if(status!=='ALL') runWhere.status=status as PaymentRunStatus;
  const [ready,runs]=await Promise.all([prisma.expense.findMany({where:readyWhere,include:{user:true,team:true},orderBy:{submittedAt:'asc'}}),prisma.paymentRun.findMany({where:runWhere,include:{expenses:{include:{user:true,team:true}}},orderBy:{createdAt:'desc'}})]);
  const payable=ready.filter(e=>e.user.bankAccountName&&e.user.bankSortCode&&e.user.bankAccountNumber); const missing=ready.filter(e=>!e.user.bankAccountName||!e.user.bankSortCode||!e.user.bankAccountNumber);
  const visibleRuns=user.isAdmin?runs:runs.map(run=>({...run,expenses:run.expenses.filter(e=>e.team.approverEmails.some((email:string)=>email.toLowerCase()===(user.email??'').toLowerCase()))}));

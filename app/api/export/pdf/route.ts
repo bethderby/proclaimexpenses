@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { Prisma } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { buildStatementPdf } from '@/lib/pdf';
@@ -10,7 +11,7 @@ export async function GET(req: NextRequest) {
   const sp = new URL(req.url).searchParams; const teamId=sp.get('team'); const startValue=sp.get('start'); const endValue=sp.get('end');
   if (!startValue || !endValue) return NextResponse.json({error:'start and end are required.'},{status:400});
   const start=new Date(`${startValue}T00:00:00`), end=new Date(`${endValue}T23:59:59.999`); if (start>end) return NextResponse.json({error:'Invalid date range.'},{status:400});
-  const where:any={date:{gte:start,lt:new Date(end.getTime()+1)},status:{notIn:['CANCELLED','REJECTED','PAYMENT_FAILED']},paymentStatus:{not:'FAILED'}};
+  const where:Prisma.ExpenseWhereInput={date:{gte:start,lt:new Date(end.getTime()+1)},status:{notIn:['CANCELLED','REJECTED','PAYMENT_FAILED']},paymentStatus:{not:'FAILED'}};
   let title='All teams';
   if(teamId){ const team=await prisma.team.findUnique({where:{id:teamId}}); if(!team)return NextResponse.json({error:'Team not found.'},{status:404}); where.teamId=teamId; title=team.name; }
   const expenses=await prisma.expense.findMany({where,include:{user:true,team:true},orderBy:{date:'asc'}});

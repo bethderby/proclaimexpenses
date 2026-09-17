@@ -1,11 +1,12 @@
 'use client';
 import { useTransition } from 'react';
 import { updateExpense } from '@/app/actions';
+import { errorMessage } from '@/lib/money';
 import DateField from './DateField';
 
 export default function EditExpenseForm({ expense, teams, onDone }: { expense:{id:string;date:string;description:string;amount:number;teamId:string}; teams:{id:string;name:string}[]; onDone:()=>void }) {
  const [pending,startTransition]=useTransition();
- return <form action={fd=>startTransition(async()=>{try{await updateExpense(fd);onDone()}catch(e:any){alert(e?.message||'Could not update expense.')}})} className="grid gap-3 sm:grid-cols-2">
+ return <form action={fd=>startTransition(async()=>{try{await updateExpense(fd);onDone()}catch(e){alert(errorMessage(e,'Could not update expense.'))}})} className="grid gap-3 sm:grid-cols-2">
   <input type="hidden" name="expenseId" value={expense.id}/>
   <label className="text-xs font-semibold text-slate-600">Description<input name="description" required defaultValue={expense.description} className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"/></label>
   <label className="text-xs font-semibold text-slate-600">Amount<input name="amount" required type="number" step="0.01" min="0.01" defaultValue={expense.amount} onWheel={(e) => e.currentTarget.blur()} className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/></label>

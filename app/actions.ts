@@ -486,7 +486,7 @@ async function addExpensesToOpenWiseBatch(expenseIds: string[], userId: string) 
     const uniqueExpenseIds = [...new Set(expenseIds.filter(Boolean))];
     if (!uniqueExpenseIds.length) return null;
 
-    let run = await findOrCreateOpenWiseRun(userId);
+    const run = await findOrCreateOpenWiseRun(userId);
     if (!run.wiseBatchGroupId) throw new Error('The open Wise batch does not have a Wise batch ID.');
 
     const batchBefore = await getWiseBatchGroup(run.wiseBatchGroupId);
@@ -643,42 +643,6 @@ export async function createWisePaymentRun() {
   revalidatePath('/dashboard/payments');
   revalidatePath('/dashboard/expenses');
   revalidatePath('/dashboard/expense-history');
-}
-
-async function closeWisePaymentRunById(runId: string) {
-  const leaseToken = await acquireWiseBatchLease();
-  try {
-    const run = await prisma.paymentRun.findUnique({ where: { id: runId } });
-    if (!run) throw new Error('Payment run not found.');
-    if (run.status !== 'WISE_OPEN' || !run.wiseBatchGroupId) throw new Error('The payment run is not open in Wise.');
-
-    const batch = await getWiseBatchGroup(run.wiseBatchGroupId);
-    const batchStatus = String(batch.status || '').toUpperCase();
-    if (batchStatus === 'COMPLETED') {
-      await prisma.paymentRun.update({
-        where: { id: run.id },
-        data: { status: 'WISE_PREPARED', wiseStatus: 'COMPLETED', exportedAt: new Date() },
-      });
-      await prisma.expense.updateMany({ where: { paymentRunId: run.id }, data: { wiseStatus: 'prepared' } });
-      return true;
-    }
-
-    if (batchStatus !== 'NEW') {
-      throw new Error(`Wise reports this batch as ${batchStatus.toLowerCase()}, so it cannot be completed automatically.`);
-    }
-
-    const completed = await completeWiseBatchGroup(run.wiseBatchGroupId, Number(batch.version));
-    await prisma.$transaction(async tx => {
-      await tx.paymentRun.update({
-        where: { id: run.id },
-        data: { status: 'WISE_PREPARED', wiseStatus: String(completed.status || 'COMPLETED'), exportedAt: new Date() },
-      });
-      await tx.expense.updateMany({ where: { paymentRunId: run.id }, data: { wiseStatus: 'prepared' } });
-    });
-    return true;
-  } finally {
-    await releaseWiseBatchLease(leaseToken);
-  }
 }
 
 async function autoCompleteWiseBatchIfApprovalsAreComplete(userId: string) {

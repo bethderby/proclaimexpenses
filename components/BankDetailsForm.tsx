@@ -2,6 +2,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { updateBankDetails } from '@/app/actions';
+import { errorMessage } from '@/lib/money';
 
 export default function BankDetailsForm({ initial }: { initial: { accountName:string; sortCode:string; accountNumber:string } }) {
  const hasDetails=!!(initial.accountName&&initial.sortCode&&initial.accountNumber);
@@ -18,7 +19,7 @@ export default function BankDetailsForm({ initial }: { initial: { accountName:st
    {saved && <p className="text-sm font-medium text-[#C99600]">Payment details saved.</p>}
    <button type="button" onClick={()=>setEditing(true)} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">Edit payment details</button>
  </div>;
- return <form action={fd=>startTransition(async()=>{setError('');setSaved(false);try{await updateBankDetails(fd);setSaved(true);setEditing(false);router.refresh()}catch(e:any){setError(e?.message||'Could not save bank details.')}})} className="space-y-4">
+ return <form action={fd=>startTransition(async()=>{setError('');setSaved(false);try{await updateBankDetails(fd);setSaved(true);setEditing(false);router.refresh()}catch(e){setError(errorMessage(e,'Could not save bank details.'))}})} className="space-y-4">
    <div><label className="field-label">Account name</label><input name="bankAccountName" required defaultValue={initial.accountName} placeholder="Name on your bank account" className="field-control mt-1" /></div>
    <div className="grid gap-4 sm:grid-cols-2"><div><label className="field-label">Sort code</label><input name="bankSortCode" inputMode="numeric" maxLength={8} required defaultValue={initial.sortCode} placeholder="12-34-56 or 123456" className="field-control mt-1" /></div><div><label className="field-label">Account number</label><input name="bankAccountNumber" inputMode="numeric" maxLength={8} required defaultValue={initial.accountNumber} placeholder="12345678" className="field-control mt-1" /></div></div>
    <p className="text-xs text-slate-500">Enter your UK sort code as 6 digits. You can type it with or without dashes, for example 12-34-56 or 123456.</p>
