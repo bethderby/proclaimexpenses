@@ -72,11 +72,15 @@ export default async function DashboardPage(){
       <Link href="/dashboard/expense-history" className="panel-link">View all <ArrowUpRight size={14}/></Link>
     </div>
     <div className="divide-y divide-slate-100">
-      {expenses.length===0?<div className="empty-state m-4">No expenses yet.</div>:expenses.map(e=><div key={e.id} className="expense-summary-row">
+      {expenses.length===0?<div className="empty-state m-4">No expenses yet.</div>:expenses.map(e=><div key={e.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-3.5">
         <div className="expense-summary-icon"><ReceiptText size={17}/></div>
-        <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-900">{e.description}</p><p className="mt-0.5 text-xs font-medium text-slate-500 md:hidden">{fmt(e.amount)}</p></div>
-        <span className="hidden shrink-0 text-sm font-bold text-slate-900 md:block">{fmt(e.amount)}</span>
-        <StatusPill status={e.status}/>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-slate-900 sm:text-[15px]">{e.description}</p>
+          <p className="mt-0.5 text-xs font-medium text-slate-500">{fmt(e.amount)}</p>
+        </div>
+        <div className="shrink-0">
+          <StatusPill status={e.status}/>
+        </div>
       </div>)}
     </div>
   </section>
