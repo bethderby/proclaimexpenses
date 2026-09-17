@@ -63,10 +63,14 @@ export async function syncWisePaymentRunById(runId: string) {
 
   await prisma.$transaction(async tx => {
     let nextStatus: 'WISE_OPEN' | 'WISE_PREPARED' | 'WISE_RECOVERY_REQUIRED' | 'COMPLETED' | 'CANCELLED' = 'WISE_RECOVERY_REQUIRED';
-    if (batchCancelled) nextStatus = 'CANCELLED';
+    // A locally cancelled payment run must stay cancelled. After cancellation
+    // the expenses are detached from the run, so a later sync can otherwise
+    // see zero remaining transfers and incorrectly reclassify a completed Wise
+    // batch as WISE_PREPARED.
+    if (run.status === 'CANCELLED' || batchCancelled) nextStatus = 'CANCELLED';
     else if (batchStatus === 'NEW' && run.status === 'WISE_OPEN') nextStatus = 'WISE_OPEN';
     else if (allSuccessful) nextStatus = 'COMPLETED';
-    else if (prepared && (allComplete || transfers.length === refreshed.length)) nextStatus = 'WISE_PREPARED';
+    else if (prepared && (allComplete || (refreshed.length > 0 && transfers.length === refreshed.length))) nextStatus = 'WISE_PREPARED';
 
     await tx.paymentRun.update({
       where: { id: runId },
