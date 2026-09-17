@@ -35,10 +35,13 @@ export default function ExpenseHistoryTable({expenses,teams}:{expenses:Expense[]
     <span className="min-w-0">
       <span className="block truncate text-sm font-semibold leading-5 text-slate-950">{e.description}</span>
       <span className="mt-0.5 hidden truncate text-xs text-slate-500 md:block">{modeLabel(e.purchaseStatus,e.paymentTiming)}</span>
-      <span className="mt-1 flex items-center gap-2 md:hidden"><StatusPill status={e.status}/>{e.receiptUrl&&<span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#C99600]"><Paperclip size={12}/> Receipt</span>}</span>
+      <span className="mt-1 flex items-center gap-2 md:hidden"><StatusPill status={e.status}/></span>
     </span>
-    <span className="text-right text-sm font-bold leading-5 text-slate-950 md:text-base">{fmt(e.amount)}</span>
-    <span className="flex justify-end pt-0.5 text-slate-400 group-hover:text-[#C99600]"><Eye size={17}/></span>
+    <span className="flex flex-col items-end gap-1 text-right text-sm font-bold leading-5 text-slate-950 md:text-base">
+      <span>{fmt(e.amount)}</span>
+      {e.receiptUrl&&<span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#C99600]"><Paperclip size={12}/> Receipt</span>}
+    </span>
+    <span className="flex justify-end pt-0.5 text-slate-400 group-hover:text-[#C99600] md:hidden"><Eye size={17}/></span>
     <span className="hidden md:block"><StatusPill status={e.status}/></span>
     <span className="hidden md:flex justify-end text-slate-400 group-hover:text-[#C99600]"><Eye size={17}/></span>
    </button>)}
