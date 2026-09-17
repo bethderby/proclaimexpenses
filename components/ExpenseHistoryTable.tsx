@@ -12,8 +12,10 @@ const modeLabel=(status:string,timing:string)=>status==='ALREADY_PURCHASED'?'Alr
 
 type Expense={id:string;date:string;description:string;amount:number;teamId:string;teamName:string;receiptUrl:string|null;status:string;purchaseStatus:string;paymentTiming:string;receiptDueAt:string|null;paymentStatus:string;settlementStatus:string;settlementNote:string|null;submittedAt:string;approvedAmount:number|null;actualAmount:number|null;decidedAt:string|null;decisionNote:string|null;relatedExpenseId:string|null;};
 
-export default function ExpenseHistoryTable({expenses,teams}:{expenses:Expense[];teams:{id:string;name:string}[]}){
- const [selected,setSelected]=useState<Expense|null>(null);
+const ROW_GRID='md:grid-cols-[112px_minmax(0,1fr)_minmax(76px,max-content)_minmax(104px,max-content)_minmax(170px,max-content)_minmax(64px,max-content)]';
+
+export default function ExpenseHistoryTable({expenses,teams,openExpense}:{expenses:Expense[];teams:{id:string;name:string}[];openExpense?:Expense|null}){
+ const [selected,setSelected]=useState<Expense|null>(openExpense??null);
  const [editing,setEditing]=useState(false);
  const close=()=>{setSelected(null);setEditing(false)};
  useEffect(()=>{
@@ -28,24 +30,28 @@ export default function ExpenseHistoryTable({expenses,teams}:{expenses:Expense[]
   };
  },[selected]);
  return <>
-  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-   <div className="hidden md:grid grid-cols-[130px_minmax(0,1fr)_220px_max-content_70px] gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500"><span>Date</span><span>Expense</span><span className="text-right">Amount</span><span>Status</span><span className="text-right">Details</span></div>
-   {expenses.map(e=><button key={e.id} type="button" onClick={()=>{setSelected(e);setEditing(false)}} className="group grid w-full grid-cols-[78px_minmax(0,1fr)_70px_24px] items-start gap-2 border-b border-slate-100 px-3 py-2.5 text-left last:border-0 hover:bg-slate-50 md:grid-cols-[130px_minmax(0,1fr)_220px_max-content_70px] md:items-center md:gap-4 md:px-5 md:py-3">
-    <span className="row-span-2 pt-0.5 text-xs text-slate-500 md:row-span-1 md:pt-0 md:text-sm">{fmtDate(e.date)}</span>
-    <span className="min-w-0">
+  <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid md:items-stretch md:gap-y-0 ${ROW_GRID}`}>
+   <div className="hidden md:contents">
+    {['Date','Expense','Amount','Receipt','Status','Details'].map((label,i)=><span key={label} className={`border-b border-slate-100 bg-slate-50 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 ${i===0?'pl-5 pr-2':i===5?'pl-2 pr-5 text-right':i===2?'px-2 text-right':'px-2'}`}>{label}</span>)}
+   </div>
+   {expenses.map((e,i)=>{const isLast=i===expenses.length-1;return <button key={e.id} type="button" onClick={()=>{setSelected(e);setEditing(false)}} className={`group grid w-full grid-cols-[78px_minmax(0,1fr)_70px_24px] items-start gap-2 border-b border-slate-100 px-3 py-2.5 text-left last:border-0 hover:bg-slate-50 md:contents`}>
+    <span className={`row-span-2 border-slate-100 pt-0.5 text-xs text-slate-500 md:row-span-1 md:border-b md:pt-0 md:text-sm md:pl-5 md:pr-2 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}>{fmtDate(e.date)}</span>
+    <span className={`min-w-0 border-slate-100 md:border-b md:px-2 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}>
       <span className="block truncate text-sm font-semibold leading-5 text-slate-950">{e.description}</span>
       <span className="mt-0.5 hidden truncate text-xs text-slate-500 md:block">{modeLabel(e.purchaseStatus,e.paymentTiming)}</span>
       {e.receiptUrl&&<span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-[#C99600] md:hidden"><Paperclip size={12}/> Receipt</span>}
       <span className="mt-1 flex items-center gap-2 md:hidden"><StatusPill status={e.status}/></span>
     </span>
-    <span className="flex items-center justify-end gap-4 text-right text-sm font-bold leading-5 text-slate-950 md:text-base">
-      <span>{fmt(e.amount)}</span>
-      {e.receiptUrl&&<span className="hidden items-center gap-1 whitespace-nowrap text-[11px] font-medium text-[#C99600] md:inline-flex md:text-xs"><Paperclip size={12}/> Receipt</span>}
+    <span className={`flex items-center justify-end border-slate-100 text-right text-sm font-bold leading-5 text-slate-950 md:border-b md:px-2 md:py-3 md:text-base md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}>
+      {fmt(e.amount)}
+    </span>
+    <span className={`hidden items-center border-slate-100 md:flex md:border-b md:px-2 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}>
+      {e.receiptUrl&&<span className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-medium text-[#C99600]"><Paperclip size={12}/> Receipt</span>}
     </span>
     <span className="flex justify-end pt-0.5 text-slate-400 group-hover:text-[#C99600] md:hidden"><Eye size={17}/></span>
-    <span className="hidden whitespace-nowrap md:block"><StatusPill status={e.status}/></span>
-    <span className="hidden md:flex justify-end text-slate-400 group-hover:text-[#C99600]"><Eye size={17}/></span>
-   </button>)}
+    <span className={`hidden items-center whitespace-nowrap border-slate-100 md:flex md:border-b md:px-2 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}><StatusPill status={e.status}/></span>
+    <span className={`hidden items-center justify-end border-slate-100 text-slate-400 group-hover:text-[#C99600] md:flex md:border-b md:pl-2 md:pr-5 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}><Eye size={17}/></span>
+   </button>;})}
   </div>
   {selected&&<div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden overscroll-none bg-slate-950/40 p-2 sm:p-4" onMouseDown={e=>{if(e.target===e.currentTarget)close()}}>
    <div className="max-h-[78vh] w-[calc(100%-1rem)] max-w-lg overflow-y-auto overscroll-contain rounded-2xl bg-white px-3 pb-3 pt-5 shadow-2xl sm:max-h-[82vh] sm:w-full sm:rounded-3xl sm:p-5">

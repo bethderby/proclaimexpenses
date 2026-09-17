@@ -1,6 +1,6 @@
 import { Ban, CheckCircle2, Clock, CreditCard, CircleAlert, ReceiptText, ShoppingCart, XCircle } from 'lucide-react';
 
-const META: Record<string, { label: string; icon: any; cls: string }> = {
+export const STATUS_META: Record<string, { label: string; icon: any; cls: string }> = {
   PENDING: { label: 'Pending approval', icon: Clock, cls: 'bg-amber-50 text-amber-700 border-amber-200' },
   APPROVED: { label: 'Approved', icon: CheckCircle2, cls: 'bg-[#FFF8E1] text-[#C99600] border-[#F3D36A]' },
   REJECTED: { label: 'Rejected', icon: XCircle, cls: 'bg-rose-50 text-rose-700 border-rose-200' },
@@ -13,6 +13,6 @@ const META: Record<string, { label: string; icon: any; cls: string }> = {
 };
 
 export default function StatusPill({ status }: { status: string }) {
-  const meta = META[status] || META.PENDING; const Icon = meta.icon;
-  return <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${meta.cls}`}><Icon size={13} /> {meta.label}</span>;
+  const meta = STATUS_META[status] || STATUS_META.PENDING; const Icon = meta.icon;
+  return <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium ${meta.cls}`}><Icon size={13} /> {meta.label}</span>;
 }
