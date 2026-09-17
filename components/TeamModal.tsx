@@ -7,8 +7,12 @@ import FormButton from './FormButton';
 type Team = { id:string; name:string; budgetTarget:number; approvers:{id:string;name:string|null;email:string}[] };
 
 export default function TeamModal({ open, onClose, team }:{open:boolean;onClose:()=>void;team?:Team}) {
+  const teamId = team?.id;
+  const approverEmailsKey = team?.approvers.map(a=>a.email).join('\u001f') ?? '';
   const [approvers, setApprovers] = useState<string[]>(team?.approvers.map(a=>a.email) || ['']);
-  useEffect(() => { setApprovers(team?.approvers.map(a=>a.email) || ['']); }, [team?.id, open]);
+  useEffect(() => {
+    setApprovers(teamId ? (approverEmailsKey ? approverEmailsKey.split('\u001f') : []) : ['']);
+  }, [teamId, open, approverEmailsKey]);
   if (!open) return null;
   const action = team ? updateTeam : createTeam;
   async function handleSubmit(formData: FormData) { await action(formData); onClose(); }
