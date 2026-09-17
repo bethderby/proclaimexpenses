@@ -42,9 +42,9 @@ export default function ExpenseHistoryTable({expenses,teams,openExpense}:{expens
       {e.receiptUrl&&<span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-[#C99600] md:hidden"><ReceiptText size={12}/> Receipt</span>}
       <span className="mt-1 flex items-center gap-2 md:hidden"><StatusPill status={e.status}/></span>
     </span>
-    <span className={`grid grid-cols-[1fr_16px] items-center gap-1.5 border-slate-100 text-right text-sm font-bold leading-5 text-slate-950 md:border-b md:px-2 md:py-3 md:text-base md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}>
+    <span className={`grid grid-cols-[1fr] items-center gap-1.5 border-slate-100 text-right text-sm font-bold leading-5 text-slate-950 md:grid-cols-[1fr_16px] md:border-b md:px-2 md:py-3 md:text-base md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}>
       <span className="text-right">{fmt(e.amount)}</span>
-      <span className="flex justify-center">{e.receiptUrl&&<ReceiptText size={13} className="text-[#C99600]" aria-label="Receipt attached"/>}</span>
+      <span className="hidden md:flex md:justify-center">{e.receiptUrl&&<ReceiptText size={13} className="text-[#C99600]" aria-label="Receipt attached"/>}</span>
     </span>
     <span className={`hidden items-center whitespace-nowrap border-slate-100 md:flex md:border-b md:px-2 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}><StatusPill status={e.status}/></span>
     <span className="flex justify-end pt-0.5 text-slate-400 group-hover:text-[#C99600] md:hidden"><Eye size={17}/></span>
