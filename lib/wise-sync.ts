@@ -53,6 +53,7 @@ export async function syncWisePaymentRunById(runId: string) {
   const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
   const expensesUrl = `${appUrl}/dashboard/expense-history`;
   const paidNotifications: { email: string; subject: string; html: string; text: string }[] = [];
+  const failedNotifications: { email: string; subject: string; html: string; text: string }[] = [];
 
   await prisma.$transaction(async tx => {
     let nextStatus: 'WISE_OPEN' | 'WISE_PREPARED' | 'WISE_RECOVERY_REQUIRED' | 'COMPLETED' | 'CANCELLED' = 'WISE_RECOVERY_REQUIRED';
@@ -100,6 +101,29 @@ export async function syncWisePaymentRunById(runId: string) {
       } else {
         const transferFailed = ['bounced_back','funds_refunded','cancelled'].includes(state);
         await tx.expense.update({ where: { id: expense.id }, data: { wiseStatus: state, ...(transferFailed ? { status: 'PAYMENT_FAILED', paymentStatus: 'FAILED' } : {}) } });
+        if (transferFailed) {
+          const subject = `Payment failed - £${expense.amount.toFixed(2)}`;
+          const recipientName = expense.user.name || expense.user.email || 'The requester';
+          const approverEmails = expense.team.approverEmails
+            .map(email => email.trim().toLowerCase())
+            .filter(Boolean);
+          const recipients = [...new Set([expense.user.email, ...approverEmails].filter(Boolean))] as string[];
+          for (const email of recipients) {
+            const isRequester = expense.user.email?.toLowerCase() === email;
+            failedNotifications.push({
+              email,
+              subject,
+              html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a"><h2>Payment failed</h2><p style="color:#64748b">The payment for <strong>${escapeHtml(expense.team.name)}</strong> could not be completed in Wise.</p><div style="padding:18px;border:1px solid #fecaca;border-radius:14px;margin:20px 0;background:#fff7f7"><p style="margin:0 0 8px;font-size:20px;font-weight:700">£${expense.amount.toFixed(2)}</p><p style="margin:0">${escapeHtml(expense.description)}</p><p style="margin:8px 0 0;color:#64748b">Wise status: ${escapeHtml(state)}</p></div><p>${isRequester ? `Please check your bank details and contact your approver if anything needs correcting.` : `The requester (${escapeHtml(recipientName)}) has been notified. Please review the expense and arrange the next step.`}</p>${expensesUrl ? `<a href="${expensesUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">View expense</a>` : ''}</div>`,
+              text: `Payment failed for £${expense.amount.toFixed(2)} - ${expense.description} (${expense.team.name}).
+
+Wise status: ${state}.
+
+${isRequester ? 'Please check your bank details and contact your approver if anything needs correcting.' : `The requester (${recipientName}) has been notified. Please review the expense and arrange the next step.`}
+
+${expensesUrl || ''}`,
+            });
+          }
+        }
       }
     }
 
@@ -112,6 +136,10 @@ export async function syncWisePaymentRunById(runId: string) {
   });
 
   for (const n of paidNotifications) {
+    await notify(n.email, n.subject, n.html, n.text);
+  }
+
+  for (const n of failedNotifications) {
     await notify(n.email, n.subject, n.html, n.text);
   }
 
