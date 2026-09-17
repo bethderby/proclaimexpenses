@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Eye, Paperclip, Pencil, XCircle } from 'lucide-react';
 import StatusPill from './StatusPill';
 import EditExpenseForm from './EditExpenseForm';
@@ -16,6 +16,17 @@ export default function ExpenseHistoryTable({expenses,teams}:{expenses:Expense[]
  const [selected,setSelected]=useState<Expense|null>(null);
  const [editing,setEditing]=useState(false);
  const close=()=>{setSelected(null);setEditing(false)};
+ useEffect(()=>{
+  if(!selected) return;
+  const previousOverflow=document.body.style.overflow;
+  const previousTouchAction=document.body.style.touchAction;
+  document.body.style.overflow='hidden';
+  document.body.style.touchAction='none';
+  return ()=>{
+   document.body.style.overflow=previousOverflow;
+   document.body.style.touchAction=previousTouchAction;
+  };
+ },[selected]);
  return <>
   <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
    <div className="hidden md:grid grid-cols-[130px_minmax(0,1fr)_130px_120px_100px] gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500"><span>Date</span><span>Expense</span><span className="text-right">Amount</span><span>Status</span><span className="text-right">Details</span></div>
@@ -28,8 +39,8 @@ export default function ExpenseHistoryTable({expenses,teams}:{expenses:Expense[]
     <span className="md:hidden col-span-full -mt-1 flex items-center justify-between"><StatusPill status={e.status}/>{e.receiptUrl&&<span className="inline-flex items-center gap-1 text-xs font-medium text-[#C99600]"><Paperclip size={13}/> Receipt</span>}</span>
    </button>)}
   </div>
-  {selected&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" onMouseDown={e=>{if(e.target===e.currentTarget)close()}}>
-   <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+  {selected&&<div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden overscroll-none bg-slate-950/40 p-2 sm:p-4" onMouseDown={e=>{if(e.target===e.currentTarget)close()}}>
+   <div className="max-h-[88vh] w-full max-w-xl overflow-y-auto overscroll-contain rounded-2xl bg-white p-4 shadow-2xl sm:max-h-[90vh] sm:rounded-3xl sm:p-6">
     {editing?<><div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-bold text-slate-950">Edit expense</h2><button onClick={()=>setEditing(false)} className="text-sm font-semibold text-slate-500">Cancel</button></div><EditExpenseForm expense={{id:selected.id,date:selected.date.slice(0,10),description:selected.description,amount:selected.amount,teamId:selected.teamId}} teams={teams} onDone={()=>{setEditing(false);window.location.reload()}}/></>:<>
       <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-[#C99600]">Expense details</p><h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">{selected.description}</h2><p className="mt-1 text-sm text-slate-500">{fmtDate(selected.date)}</p></div><button onClick={close} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600">Close</button></div>
       <div className="mt-5 flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span className="text-sm font-medium text-slate-500">Amount</span><span className="text-xl font-bold text-slate-950">{fmt(selected.amount)}</span></div>
@@ -37,7 +48,7 @@ export default function ExpenseHistoryTable({expenses,teams}:{expenses:Expense[]
       {selected.settlementNote&&<div className="mt-5 rounded-2xl border border-[#F3D36A] bg-[#FFF8E1] p-4 text-sm leading-6 text-[#7A5A00]">{selected.settlementNote}</div>}
       {selected.decisionNote&&<Info label="Approver note"><span className="text-slate-600">{selected.decisionNote}</span></Info>}
       <div className="mt-5 flex flex-wrap items-center gap-2">{selected.receiptUrl&&<a href={`/api/receipts/${selected.id}`} target="_blank" rel="noreferrer" className="secondary-button"><Paperclip size={15}/> View receipt</a>}{selected.status==='PENDING'&&!selected.relatedExpenseId&&<button onClick={()=>setEditing(true)} className="secondary-button"><Pencil size={15}/> Edit</button>}{selected.status==='PENDING'&&!selected.relatedExpenseId&&<form action={cancelExpense}><input type="hidden" name="expenseId" value={selected.id}/><button className="secondary-button text-rose-700"><XCircle size={15}/> Cancel</button></form>}{selected.status==='ADVANCE_PAID_AWAITING_RECEIPT'&&<MarkPurchasedForm expenseId={selected.id} onDone={close}/>}
-      {selected.relatedExpenseId&&selected.status==='PENDING'&&<p className="w-full text-xs font-medium text-slate-500">Additional reimbursement: only an approver can approve it, and only an admin can reject it.</p>}</div>
+      </div>
     </>}
    </div>
   </div>}
