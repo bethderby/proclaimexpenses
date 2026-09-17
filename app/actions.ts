@@ -744,11 +744,7 @@ async function autoCompleteWiseBatchIfApprovalsAreComplete(userId: string) {
   } catch (error: unknown) {
     // There may simply be nothing eligible to add. Do not treat that as a
     // failure: an existing open batch can still be completed below.
-    const message = error instanceof Error ? error.message : String(error ?? '');
-
-    if (!message.toLowerCase().includes('no ready expenses')) {
-      throw error;
-    }
+    if (!String(error?.message || '').toLowerCase().includes('no ready expenses')) throw error;
   }
 
   const leaseToken = await acquireWiseBatchLease();
