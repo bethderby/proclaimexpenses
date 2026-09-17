@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { getServerSession } from 'next-auth';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { Prisma } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { encryptBankDetail } from '@/lib/bank';
@@ -690,7 +691,7 @@ async function autoCompleteWiseBatchIfApprovalsAreComplete(userId: string) {
     : await prisma.team.count({ where: { approverEmails: { has: approverEmail } } });
   const isApprover = user.isAdmin || approverTeamCount > 0;
   if (!isApprover) return false;
-  const pendingWhere: any = user.isAdmin
+  const pendingWhere: Prisma.ExpenseWhereInput = user.isAdmin
     ? { status: 'PENDING' }
     : { status: 'PENDING', team: { approverEmails: { has: approverEmail } } };
 
@@ -768,7 +769,7 @@ async function autoCompleteWiseBatchIfApprovalsAreComplete(userId: string) {
 }
 
 async function createWisePaymentRunForUser(userId: string, isAdmin: boolean, approverEmail: string) {
-  const where: any = isAdmin
+  const where: Prisma.ExpenseWhereInput = isAdmin
     ? { paymentStatus: 'READY', paymentRunId: null }
     : { paymentStatus: 'READY', paymentRunId: null, team: { approverEmails: { has: approverEmail } } };
 
@@ -804,7 +805,7 @@ export async function completeWisePaymentRun(formData: FormData) {
     // have not yet been added to a payment run. This means the approver does
     // not need a separate Prepare step and we do not accidentally close a
     // batch while an approved expense is still waiting.
-    const readyWhere: any = user.isAdmin
+    const readyWhere: Prisma.ExpenseWhereInput = user.isAdmin
       ? { paymentStatus: 'READY', paymentRunId: null }
       : {
           paymentStatus: 'READY',
