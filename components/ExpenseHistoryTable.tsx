@@ -17,6 +17,13 @@ export default function ExpenseHistoryTable({expenses,teams}:{expenses:Expense[]
  const [editing,setEditing]=useState(false);
  const close=()=>{setSelected(null);setEditing(false)};
  useEffect(()=>{
+  const expenseId=new URLSearchParams(window.location.search).get('expenseId');
+  if(expenseId && !selected){
+   const match=expenses.find(e=>e.id===expenseId);
+   if(match) setSelected(match);
+  }
+ },[expenses,selected]);
+ useEffect(()=>{
   if(!selected) return;
   const previousOverflow=document.body.style.overflow;
   const previousTouchAction=document.body.style.touchAction;
@@ -40,7 +47,7 @@ export default function ExpenseHistoryTable({expenses,teams}:{expenses:Expense[]
    </button>)}
   </div>
   {selected&&<div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden overscroll-none bg-slate-950/40 p-2 sm:p-4" onMouseDown={e=>{if(e.target===e.currentTarget)close()}}>
-   <div className="max-h-[78vh] w-[calc(100%-1rem)] max-w-lg overflow-y-auto overscroll-contain rounded-2xl bg-white p-3 shadow-2xl sm:max-h-[82vh] sm:w-full sm:rounded-3xl sm:p-5">
+   <div className="max-h-[78vh] w-[calc(100%-1rem)] max-w-lg overflow-y-auto overscroll-contain rounded-2xl bg-white px-3 pb-3 pt-5 shadow-2xl sm:max-h-[82vh] sm:w-full sm:rounded-3xl sm:p-5">
     {editing?<><div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-bold text-slate-950">Edit expense</h2><button onClick={()=>setEditing(false)} className="text-sm font-semibold text-slate-500">Cancel</button></div><EditExpenseForm expense={{id:selected.id,date:selected.date.slice(0,10),description:selected.description,amount:selected.amount,teamId:selected.teamId}} teams={teams} onDone={()=>{setEditing(false);window.location.reload()}}/></>:<>
       <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-[#C99600]">Expense details</p><h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">{selected.description}</h2><p className="mt-1 text-sm text-slate-500">{fmtDate(selected.date)}</p></div><button onClick={close} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600">Close</button></div>
       <div className="mt-4 flex items-center justify-between rounded-2xl bg-slate-50 p-3"><span className="text-sm font-medium text-slate-500">Amount</span><span className="text-xl font-bold text-slate-950">{fmt(selected.amount)}</span></div>

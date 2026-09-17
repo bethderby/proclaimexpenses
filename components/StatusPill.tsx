@@ -8,7 +8,7 @@ const META: Record<string, { label: string; icon: any; cls: string }> = {
   READY_TO_PAY: { label: 'Ready to pay', icon: CreditCard, cls: 'bg-violet-50 text-violet-700 border-violet-200' },
   PAYMENT_PENDING: { label: 'Payment pending', icon: CreditCard, cls: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
   ADVANCE_PAID_AWAITING_RECEIPT: { label: 'Advance paid · receipt needed', icon: ReceiptText, cls: 'bg-orange-50 text-orange-700 border-orange-200' },
-  PAID: { label: 'Paid', icon: CheckCircle2, cls: 'bg-[#FFF8E1] text-[#C99600] border-[#F3D36A]' },
+  PAID: { label: 'Paid', icon: CheckCircle2, cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   PAYMENT_FAILED: { label: 'Payment failed', icon: CircleAlert, cls: 'bg-rose-50 text-rose-700 border-rose-200' },
 };
 

@@ -72,13 +72,12 @@ export default async function DashboardPage(){
       <Link href="/dashboard/expense-history" className="panel-link">View all <ArrowUpRight size={14}/></Link>
     </div>
     <div className="divide-y divide-slate-100">
-      {expenses.length===0?<div className="empty-state m-4">No expenses yet.</div>:expenses.map(e=><div key={e.id} className="expense-summary-row">
+      {expenses.length===0?<div className="empty-state m-4">No expenses yet.</div>:expenses.map(e=><Link key={e.id} href={`/dashboard/expense-history?expenseId=${encodeURIComponent(e.id)}`} className="expense-summary-row">
         <div className="expense-summary-icon"><ReceiptText size={17}/></div>
         <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-900">{e.description}</p><p className="mt-0.5 text-xs text-slate-500">{e.team.name}</p></div>
         <span className="shrink-0 text-sm font-bold text-slate-900">{fmt(e.amount)}</span>
         <StatusPill status={e.status}/>
-        
-      </div>)}
+      </Link>)}
     </div>
   </section>
 

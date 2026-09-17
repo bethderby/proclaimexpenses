@@ -25,7 +25,7 @@ export default function SubmitExpenseButton({ busy, disabled: externallyDisabled
       disabled={disabled}
       aria-busy={showSpinner}
       onClick={() => setPressed(true)}
-      className={`action-button w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-[#C99600] disabled:opacity-100 ${active ? 'action-button-pressed' : ''}`}
+      className={`action-button w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 disabled:opacity-100 ${active ? 'action-button-pressed' : ''}`}
     >
       {showSpinner && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
       {pending ? 'Submitting…' : busy ? 'Uploading receipt…' : receiptRequired ? 'Add receipt to submit' : pressed ? 'Submitting…' : 'Submit expense'}
