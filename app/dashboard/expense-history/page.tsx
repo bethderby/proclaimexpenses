@@ -9,7 +9,7 @@ const isoFirstOfMonth=()=>{const now=new Date();return new Date(now.getFullYear(
 const isoToday=()=>new Date().toISOString().slice(0,10);
 const fmt=(n:number)=>`£${n.toFixed(2)}`;
 
-export default async function ExpenseHistoryPage({searchParams}:{searchParams:{from?:string;to?:string}}){
+export default async function ExpenseHistoryPage({searchParams}:{searchParams:{from?:string;to?:string;expenseId?:string}}){
  const session=await getServerSession(authOptions);if(!session?.user)redirect('/login');const user=session.user as any;
  const from=searchParams.from||isoFirstOfMonth(),to=searchParams.to||isoToday();const fromDate=new Date(`${from}T00:00:00`),toDate=new Date(`${to}T23:59:59.999`);
  const [teams,expenses]=await Promise.all([
