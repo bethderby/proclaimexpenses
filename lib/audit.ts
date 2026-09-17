@@ -46,7 +46,7 @@ export function auditEventData(input: AuditEventInput) {
     teamId: input.teamId ?? null,
     targetUserId: input.targetUserId ?? null,
     summary: input.summary,
-    metadata: input.metadata == null ? Prisma.JsonNull : input.metadata,
+    metadata: input.metadata == null ? Prisma.JsonNull : JSON.parse(JSON.stringify(input.metadata)) as Prisma.InputJsonValue,
   };
 }
 
