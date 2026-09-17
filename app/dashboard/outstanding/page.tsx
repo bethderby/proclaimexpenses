@@ -4,7 +4,6 @@ import { redirect } from 'next/navigation';
 import { ReceiptText, Clock3, CircleAlert } from 'lucide-react';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import ActivityLogExport from '@/components/ActivityLogExport';
 
 const money=(n:number)=>`£${n.toFixed(2)}`;
 const daysSince=(value:Date)=>Math.max(0,Math.floor((Date.now()-value.getTime())/(1000*60*60*24)));
@@ -48,7 +47,6 @@ export default async function OutstandingPage(){
 
   <section>
    <div className="mb-4"><p className="panel-kicker">Export</p><h2 className="font-semibold text-slate-950">Activity log</h2><p className="mt-1 text-sm text-slate-500">Export the full activity log for a date range, including rejections, cancellations and failed payments.</p></div>
-   <ActivityLogExport/>
-  </section>
+</section>
  </div>;
 }
