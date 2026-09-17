@@ -23,7 +23,7 @@ export default async function ExpenseHistoryPage({searchParams}:{searchParams:{f
  const from=searchParams.from||(status?EARLIEST:isoFirstOfMonth()),to=searchParams.to||isoToday();const fromDate=new Date(`${from}T00:00:00`),toDate=new Date(`${to}T23:59:59.999`);
  const [teams,expenses,openExpense]=await Promise.all([
   prisma.team.findMany({orderBy:{name:'asc'}}),
-  prisma.expense.findMany({where:{userId:user.id,date:{gte:fromDate,lte:toDate},...(status?{status}:{})},include:{team:true},orderBy:[{date:'desc'},{submittedAt:'desc'},{id:'desc'}]}),
+  prisma.expense.findMany({where:{userId:user.id,date:{gte:fromDate,lte:toDate},...(status?{status:status as any}:{})},include:{team:true},orderBy:[{date:'desc'},{submittedAt:'desc'},{id:'desc'}]}),
   expenseId?prisma.expense.findFirst({where:{id:expenseId,userId:user.id},include:{team:true}}):Promise.resolve(null),
  ]);
  const total=expenses.reduce((s,e)=>s+e.amount,0);
