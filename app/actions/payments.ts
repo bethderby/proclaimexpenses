@@ -204,5 +204,34 @@ export async function cancelPaymentRun(formData: FormData) {
     await notify(email, 'Payment batch cancelled - approval required again', html, text);
   }
 
+  // Notify the configured approvers for the affected teams as well. The
+  // cancellation clears the previous approval, so these expenses need to be
+  // reviewed and approved again before they can enter a new payment batch.
+  const approverEmails = new Set<string>();
+  for (const expense of run.expenses) {
+    if (expense.paymentStatus !== 'PAID' && expense.status === 'PAYMENT_PENDING') {
+      for (const email of expense.team.approverEmails) {
+        const normalized = email.trim().toLowerCase();
+        if (normalized) approverEmails.add(normalized);
+      }
+    }
+  }
+
+  const affectedDetails = [...cancelledByEmail.values()]
+    .flat()
+    .map(e => `£${e.amount.toFixed(2)} - ${e.description}`)
+    .join('\n');
+
+  if (affectedDetails && approverEmails.size > 0) {
+    const { html, text } = renderEmail({
+      heading: 'Payment batch cancelled - approval required',
+      intro: 'A payment batch has been cancelled. The affected expense(s) have been returned to Pending and the previous approval has been cleared. Please review and approve them again before they can be paid.',
+      plainTextExtra: `Expenses returned to approval:\n${affectedDetails}`,
+      ctaPath: '/dashboard/approvals',
+      ctaLabel: 'Review approvals',
+    });
+    await notify([...approverEmails], 'Payment batch cancelled - approval required again', html, text);
+  }
+
   revalidatePath('/dashboard/payments'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history');
 }
