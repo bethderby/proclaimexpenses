@@ -34,7 +34,7 @@ export default function PaymentRunFilter({ status }: { status: string }) {
           value={status || 'ALL'}
           onChange={e => updateStatus(e.target.value)}
           disabled={pending}
-          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-[#C99600]"
+          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-[#146650]"
         >
           {statuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>

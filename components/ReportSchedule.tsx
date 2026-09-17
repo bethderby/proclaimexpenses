@@ -13,7 +13,7 @@ export default function ReportSchedule({ enabled, dayOfMonth, recipients }: { en
         <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-slate-800">
           <span className="relative inline-flex h-6 w-11 shrink-0 items-center">
             <input type="checkbox" name="enabled" value="true" defaultChecked={enabled} className="peer sr-only" />
-            <span className="absolute inset-0 rounded-full bg-slate-300 transition peer-checked:bg-[#C99600] peer-focus-visible:ring-2 peer-focus-visible:ring-[#C99600] peer-focus-visible:ring-offset-2" />
+            <span className="absolute inset-0 rounded-full bg-slate-300 transition peer-checked:bg-[#146650] peer-focus-visible:ring-2 peer-focus-visible:ring-[#146650] peer-focus-visible:ring-offset-2" />
             <span className="relative ml-1 h-4 w-4 rounded-full bg-white shadow-sm transition peer-checked:translate-x-5" />
           </span>
           <span>Send the report automatically each month</span>
@@ -30,7 +30,7 @@ export default function ReportSchedule({ enabled, dayOfMonth, recipients }: { en
           </div>
         </div>
         <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Additional recipients (optional)
-          <textarea name="recipients" defaultValue={recipientText} rows={4} placeholder="finance@example.com, trustee@example.com" className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-[#C99600]" />
+          <textarea name="recipients" defaultValue={recipientText} rows={4} placeholder="finance@example.com, trustee@example.com" className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-[#146650]" />
           <span className="mt-1.5 block text-xs font-normal normal-case tracking-normal text-slate-400">Enter one email per line, or separate emails with commas.</span>
           <span className="mt-2 block rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-normal normal-case tracking-normal text-slate-600"><strong className="font-semibold text-slate-800">Admin recipients:</strong> All active admins with an email address on file will receive the report as well as any additional recipients entered above.</span>
         </label>
