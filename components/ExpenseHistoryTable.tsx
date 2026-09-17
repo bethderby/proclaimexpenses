@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { Eye, ReceiptText, Pencil, XCircle } from 'lucide-react';
 import StatusPill from './StatusPill';
 import EditExpenseForm from './EditExpenseForm';
@@ -17,6 +17,9 @@ const ROW_GRID='md:grid-cols-[112px_minmax(0,1fr)_minmax(96px,max-content)_minma
 export default function ExpenseHistoryTable({expenses,teams,openExpense}:{expenses:Expense[];teams:{id:string;name:string}[];openExpense?:Expense|null}){
  const [selected,setSelected]=useState<Expense|null>(openExpense??null);
  const [editing,setEditing]=useState(false);
+ const [cancelling,setCancelling]=useState(false);
+ const [cancelError,setCancelError]=useState<string|null>(null);
+ const [isPending,startTransition]=useTransition();
  const close=()=>{setSelected(null);setEditing(false)};
  useEffect(()=>{
   if(!selected) return;
@@ -61,8 +64,9 @@ export default function ExpenseHistoryTable({expenses,teams,openExpense}:{expens
       <div className="mt-4 grid gap-2 sm:grid-cols-2"><Info label="Status"><StatusPill status={selected.status}/></Info><Info label="Team">{selected.teamName}</Info><Info label="Payment">{modeLabel(selected.purchaseStatus,selected.paymentTiming)}</Info><Info label="Submitted">{fmtDate(selected.submittedAt)}</Info>{selected.approvedAmount!=null&&<Info label="Approved amount">{fmt(selected.approvedAmount)}</Info>}{selected.actualAmount!=null&&<Info label="Receipt amount">{fmt(selected.actualAmount)}</Info>}</div>
       {selected.settlementNote&&<div className="mt-4 rounded-2xl border border-[#F3D36A] bg-[#FFF8E1] p-3 text-sm leading-6 text-[#7A5A00]">{selected.settlementNote}</div>}
       {selected.decisionNote&&<Info label="Approver note"><span className="text-slate-600">{selected.decisionNote}</span></Info>}
-      <div className="mt-4 flex flex-wrap items-center gap-2">{selected.receiptUrl&&<a href={`/api/receipts/${selected.id}`} target="_blank" rel="noreferrer" className="secondary-button"><ReceiptText size={15}/> View receipt</a>}{selected.status==='PENDING'&&!selected.relatedExpenseId&&<button onClick={()=>setEditing(true)} className="secondary-button"><Pencil size={15}/> Edit</button>}{selected.status==='PENDING'&&!selected.relatedExpenseId&&<form action={cancelExpense}><input type="hidden" name="expenseId" value={selected.id}/><button className="secondary-button text-rose-700"><XCircle size={15}/> Cancel</button></form>}{selected.status==='ADVANCE_PAID_AWAITING_RECEIPT'&&<MarkPurchasedForm expenseId={selected.id} onDone={close}/>}
+      <div className="mt-4 flex flex-wrap items-center gap-2">{selected.receiptUrl&&<a href={`/api/receipts/${selected.id}`} target="_blank" rel="noreferrer" className="secondary-button"><ReceiptText size={15}/> View receipt</a>}{selected.status==='PENDING'&&!selected.relatedExpenseId&&<button onClick={()=>setEditing(true)} className="secondary-button"><Pencil size={15}/> Edit</button>}{selected.status==='PENDING'&&!selected.relatedExpenseId&&<form onSubmit={e=>{e.preventDefault();setCancelError(null);setCancelling(true);const formData=new FormData(e.currentTarget);startTransition(async()=>{try{await cancelExpense(formData);close()}catch(error){setCancelError(error instanceof Error?error.message:'Unable to cancel this expense. Please try again.')}finally{setCancelling(false)}})}}><input type="hidden" name="expenseId" value={selected.id}/><button type="submit" disabled={cancelling||isPending} className="secondary-button text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"><XCircle size={15}/>{cancelling?'Cancelling...':'Cancel'}</button></form>}{selected.status==='ADVANCE_PAID_AWAITING_RECEIPT'&&<MarkPurchasedForm expenseId={selected.id} onDone={close}/>}
       </div>
+      {cancelError&&<div role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">{cancelError}</div>}
     </>}
    </div>
   </div>}
