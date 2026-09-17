@@ -12,7 +12,7 @@ const modeLabel=(status:string,timing:string)=>status==='ALREADY_PURCHASED'?'Alr
 
 type Expense={id:string;date:string;description:string;amount:number;teamId:string;teamName:string;receiptUrl:string|null;status:string;purchaseStatus:string;paymentTiming:string;receiptDueAt:string|null;paymentStatus:string;settlementStatus:string;settlementNote:string|null;submittedAt:string;approvedAmount:number|null;actualAmount:number|null;decidedAt:string|null;decisionNote:string|null;relatedExpenseId:string|null;};
 
-const ROW_GRID='md:grid-cols-[112px_minmax(0,1fr)_minmax(76px,max-content)_minmax(104px,max-content)_minmax(170px,max-content)_minmax(64px,max-content)]';
+const ROW_GRID='md:grid-cols-[112px_minmax(0,1fr)_minmax(96px,max-content)_minmax(190px,max-content)_minmax(64px,max-content)]';
 
 export default function ExpenseHistoryTable({expenses,teams,openExpense}:{expenses:Expense[];teams:{id:string;name:string}[];openExpense?:Expense|null}){
  const [selected,setSelected]=useState<Expense|null>(openExpense??null);
@@ -32,7 +32,7 @@ export default function ExpenseHistoryTable({expenses,teams,openExpense}:{expens
  return <>
   <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid md:items-stretch md:gap-y-0 ${ROW_GRID}`}>
    <div className="hidden md:contents">
-    {['Date','Expense','Amount','Receipt','Status','Details'].map((label,i)=><span key={label} className={`border-b border-slate-100 bg-slate-50 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 ${i===0?'pl-5 pr-2':i===5?'pl-2 pr-5 text-right':i===2?'px-2 text-right':'px-2'}`}>{label}</span>)}
+    {['Date','Expense','Amount','Status','Details'].map((label,i)=><span key={label} className={`border-b border-slate-100 bg-slate-50 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 ${i===0?'pl-5 pr-2':i===4?'pl-2 pr-5 text-right':i===2?'px-2 text-right':'px-2'}`}>{label}</span>)}
    </div>
    {expenses.map((e,i)=>{const isLast=i===expenses.length-1;return <button key={e.id} type="button" onClick={()=>{setSelected(e);setEditing(false)}} className={`group grid w-full grid-cols-[78px_minmax(0,1fr)_70px_24px] items-start gap-2 border-b border-slate-100 px-3 py-2.5 text-left last:border-0 hover:bg-slate-50 md:contents`}>
     <span className={`row-span-2 border-slate-100 pt-0.5 text-xs text-slate-500 md:row-span-1 md:border-b md:pt-0 md:text-sm md:pl-5 md:pr-2 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}>{fmtDate(e.date)}</span>
@@ -42,14 +42,12 @@ export default function ExpenseHistoryTable({expenses,teams,openExpense}:{expens
       {e.receiptUrl&&<span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-[#C99600] md:hidden"><Paperclip size={12}/> Receipt</span>}
       <span className="mt-1 flex items-center gap-2 md:hidden"><StatusPill status={e.status}/></span>
     </span>
-    <span className={`flex items-center justify-end border-slate-100 text-right text-sm font-bold leading-5 text-slate-950 md:border-b md:px-2 md:py-3 md:text-base md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}>
-      {fmt(e.amount)}
+    <span className={`grid grid-cols-[1fr_16px] items-center gap-1.5 border-slate-100 text-right text-sm font-bold leading-5 text-slate-950 md:border-b md:px-2 md:py-3 md:text-base md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}>
+      <span className="text-right">{fmt(e.amount)}</span>
+      <span className="flex justify-center">{e.receiptUrl&&<Paperclip size={13} className="text-[#C99600]" aria-label="Receipt attached"/>}</span>
     </span>
-    <span className={`hidden items-center border-slate-100 md:flex md:border-b md:px-2 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}>
-      {e.receiptUrl&&<span className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-medium text-[#C99600]"><Paperclip size={12}/> Receipt</span>}
-    </span>
-    <span className="flex justify-end pt-0.5 text-slate-400 group-hover:text-[#C99600] md:hidden"><Eye size={17}/></span>
     <span className={`hidden items-center whitespace-nowrap border-slate-100 md:flex md:border-b md:px-2 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}><StatusPill status={e.status}/></span>
+    <span className="flex justify-end pt-0.5 text-slate-400 group-hover:text-[#C99600] md:hidden"><Eye size={17}/></span>
     <span className={`hidden items-center justify-end border-slate-100 text-slate-400 group-hover:text-[#C99600] md:flex md:border-b md:pl-2 md:pr-5 md:py-3 md:group-hover:bg-slate-50 ${isLast?'md:border-b-0':''}`}><Eye size={17}/></span>
    </button>;})}
   </div>
