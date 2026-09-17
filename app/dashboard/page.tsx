@@ -77,7 +77,7 @@ export default async function DashboardPage(){
         <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-900">{e.description}</p><p className="mt-0.5 text-xs text-slate-500">{e.team.name}</p></div>
         <span className="shrink-0 text-sm font-bold text-slate-900">{fmt(e.amount)}</span>
         <StatusPill status={e.status}/>
-      </Link>)}
+      </div>)}
     </div>
   </section>
 
