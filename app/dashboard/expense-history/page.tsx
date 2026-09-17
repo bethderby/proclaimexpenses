@@ -14,7 +14,7 @@ export default async function ExpenseHistoryPage({searchParams}:{searchParams:{f
  const from=searchParams.from||isoFirstOfMonth(),to=searchParams.to||isoToday();const fromDate=new Date(`${from}T00:00:00`),toDate=new Date(`${to}T23:59:59.999`);
  const [teams,expenses]=await Promise.all([
   prisma.team.findMany({orderBy:{name:'asc'}}),
-  prisma.expense.findMany({where:{userId:user.id,date:{gte:fromDate,lte:toDate}},include:{team:true},orderBy:{date:'desc'}}),
+  prisma.expense.findMany({where:{userId:user.id,date:{gte:fromDate,lte:toDate}},include:{team:true},orderBy:[{date:'desc'},{submittedAt:'desc'},{id:'desc'}]}),
  ]);
  const total=expenses.reduce((s,e)=>s+e.amount,0);
  const rows=expenses.map(e=>({id:e.id,date:e.date.toISOString(),description:e.description,amount:e.amount,teamId:e.teamId,teamName:e.team.name,receiptUrl:e.receiptUrl,status:e.status,purchaseStatus:e.purchaseStatus,paymentTiming:e.paymentTiming,receiptDueAt:e.receiptDueAt?.toISOString()||null,paymentStatus:e.paymentStatus,settlementStatus:e.settlementStatus,settlementNote:e.settlementNote,submittedAt:e.submittedAt.toISOString(),approvedAmount:e.approvedAmount,actualAmount:e.actualAmount,decidedAt:e.decidedAt?.toISOString()||null,decisionNote:e.decisionNote,relatedExpenseId:e.relatedExpenseId}));
