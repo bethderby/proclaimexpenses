@@ -14,9 +14,9 @@ export default function ExpenseRow({ expense, teams, variant }:{ expense:{id:str
  const [editing,setEditing]=useState(false);
  if(editing)return <div className="border-b border-slate-100 bg-slate-50/60 p-3"><EditExpenseForm expense={{id:expense.id,date:expense.date,description:expense.description,amount:expense.amount,teamId:expense.teamId}} teams={teams} onDone={()=>setEditing(false)}/></div>;
 
- const needsPurchaseAction = expense.status==='AWAITING_PURCHASE'||expense.status==='ADVANCE_PAID_AWAITING_RECEIPT';
+ const needsPurchaseAction = expense.status==='ADVANCE_PAID_AWAITING_RECEIPT';
  const canEdit = expense.status==='PENDING';
- const canCancel = expense.status==='PENDING'||expense.status==='AWAITING_PURCHASE';
+ const canCancel = expense.status==='PENDING';
  const hasActions = needsPurchaseAction || canEdit || canCancel;
  const settlementTone = expense.settlementStatus==='BALANCE_TO_RETURN' ? 'bg-amber-50 text-amber-800 border border-amber-200' : expense.settlementStatus==='ADDITIONAL_REIMBURSEMENT_REQUIRED' ? 'bg-[#FFF8E1] text-[#A97900] border border-[#F3D36A]' : '';
 

@@ -57,10 +57,11 @@ export async function submitExpense(formData: FormData) {
   if (!['AFTER_PURCHASE', 'ADVANCE'].includes(paymentTiming)) throw new Error('Choose when you need the money.');
   if (purchaseStatus === 'ALREADY_PURCHASED' && !receiptUrl) throw new Error('A receipt is required when the item has already been purchased.');
   if (purchaseStatus === 'ALREADY_PURCHASED' && paymentTiming !== 'AFTER_PURCHASE') throw new Error('An already-purchased expense cannot request an advance.');
+  if (purchaseStatus === 'NOT_PURCHASED' && paymentTiming !== 'ADVANCE') throw new Error('An expense that has not yet been purchased must be submitted as an advance.');
 
   const { team, approverEmails } = await getTeamApproverEmails(teamId);
   const isAlreadyPurchased = purchaseStatus === 'ALREADY_PURCHASED';
-  const receiptDueAt = isAlreadyPurchased ? null : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const receiptDueAt = null;
 
   const expense = await prisma.expense.create({
     data: {
@@ -117,7 +118,7 @@ export async function cancelExpense(formData: FormData) {
   const expenseId = String(formData.get('expenseId') || '');
   const expense = await prisma.expense.findUnique({ where: { id: expenseId } });
   if (!expense || expense.userId !== user.id) throw new Error('Expense not found.');
-  if (expense.status !== 'PENDING' && expense.status !== 'AWAITING_PURCHASE') throw new Error('This expense can no longer be cancelled.');
+  if (expense.status !== 'PENDING') throw new Error('This expense can no longer be cancelled.');
   await prisma.expense.update({ where: { id: expenseId }, data: { status: 'CANCELLED' } });
   revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard');
 }
@@ -132,13 +133,11 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
   if (expense.status !== 'PENDING') throw new Error('This expense has already been decided.');
   if (decision === 'APPROVED' && expense.purchaseStatus === 'ALREADY_PURCHASED' && !expense.receiptUrl) throw new Error('A receipt is required before an already-purchased expense can be approved.');
 
-  let nextStatus: 'APPROVED' | 'AWAITING_PURCHASE' | 'READY_TO_PAY' = 'APPROVED';
+  let nextStatus: 'APPROVED' | 'READY_TO_PAY' = 'APPROVED';
   let paymentStatus: 'NOT_READY' | 'READY' = 'NOT_READY';
   if (decision === 'APPROVED') {
-    if (expense.purchaseStatus === 'NOT_PURCHASED') nextStatus = 'AWAITING_PURCHASE';
-    else nextStatus = 'READY_TO_PAY';
-    if (expense.purchaseStatus === 'ALREADY_PURCHASED') paymentStatus = 'READY';
-    else if (expense.paymentTiming === 'ADVANCE') paymentStatus = 'READY';
+    nextStatus = 'READY_TO_PAY';
+    paymentStatus = 'READY';
   }
 
   await prisma.expense.update({ where: { id: expenseId }, data: { status: decision === 'REJECTED' ? 'REJECTED' : nextStatus, paymentStatus, approvedAmount: decision === 'APPROVED' ? expense.amount : null, decisionNote: note || null, decidedAt: new Date() } });
@@ -196,11 +195,9 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
         : 'Your extra reimbursement was not approved. Please speak to your approver if you need more information.')
       : expense.purchaseStatus === 'NOT_PURCHASED' && expense.paymentTiming === 'ADVANCE' && approved
         ? (wisePreparedAutomatically
-          ? 'Your advance has been approved and the payment batch has been prepared in Wise and is waiting there for funding/confirmation.'
-          : 'Your advance has been approved and is ready for a Wise payment run. If Wise preparation could not be completed automatically, it can be prepared from the Payments page.')
-        : expense.purchaseStatus === 'NOT_PURCHASED' && approved
-          ? 'Once you buy the item, open Expense History, mark it as purchased, upload the receipt and it will become ready for reimbursement.'
-          : approved
+          ? 'Your advance has been approved and the payment batch has been prepared in Wise and is waiting there for funding/confirmation. You must upload the receipt after the purchase.'
+          : 'Your advance has been approved and is ready for payment. You must upload the receipt after the purchase.')
+        : approved
             ? (wisePreparedAutomatically
               ? 'Your reimbursement has been approved and the payment batch has been prepared in Wise and is waiting there for funding/confirmation.'
               : wisePreparationError
@@ -229,7 +226,7 @@ export async function markExpensePurchased(formData: FormData) {
   if (!actualAmount || actualAmount <= 0) throw new Error('Enter the actual amount shown on the receipt.');
   const expense = await prisma.expense.findUnique({ where: { id: expenseId }, include: { team: true } });
   if (!expense || expense.userId !== user.id) throw new Error('Expense not found.');
-  if (expense.status !== 'AWAITING_PURCHASE' && expense.status !== 'ADVANCE_PAID_AWAITING_RECEIPT') throw new Error('This expense is not waiting for a purchase or receipt.');
+  if (expense.status !== 'ADVANCE_PAID_AWAITING_RECEIPT') throw new Error('This expense is not waiting for its receipt.');
 
   if (expense.status === 'ADVANCE_PAID_AWAITING_RECEIPT') {
     const advance = expense.advanceAmount ?? expense.amount;
@@ -568,7 +565,7 @@ async function addExpensesToOpenWiseBatch(expenseIds: string[], userId: string) 
         } else {
           await prisma.expense.update({
             where: { id: expense.id },
-            data: { paymentRunId: null, paymentStatus: 'READY', status: expense.purchaseStatus === 'NOT_PURCHASED' ? 'AWAITING_PURCHASE' : 'READY_TO_PAY', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null },
+            data: { paymentRunId: null, paymentStatus: 'READY', status: 'READY_TO_PAY', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null },
           });
         }
       }
@@ -921,8 +918,7 @@ export async function cancelPaymentRun(formData: FormData) {
 
   await prisma.$transaction(async tx => {
     await tx.paymentRun.update({ where: { id: runId }, data: { status: 'CANCELLED', wiseStatus: 'cancelled', preparationKey: null } });
-    await tx.expense.updateMany({ where: { paymentRunId: runId, status: 'PAYMENT_PENDING', purchaseStatus: 'NOT_PURCHASED' }, data: { paymentRunId: null, paymentStatus: 'READY', status: 'AWAITING_PURCHASE', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null } });
-    await tx.expense.updateMany({ where: { paymentRunId: runId, status: 'PAYMENT_PENDING', purchaseStatus: 'ALREADY_PURCHASED' }, data: { paymentRunId: null, paymentStatus: 'READY', status: 'READY_TO_PAY', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null } });
+    await tx.expense.updateMany({ where: { paymentRunId: runId, status: 'PAYMENT_PENDING' }, data: { paymentRunId: null, paymentStatus: 'READY', status: 'READY_TO_PAY', paymentReference: null, wiseBatchGroupId: null, wiseTransferId: null, wiseStatus: null, wasInCancelledPaymentRun: true } });
   });
   } finally {
     if (batchLeaseToken) await releaseWiseBatchLease(batchLeaseToken);

@@ -42,6 +42,11 @@ export default function ExpenseForm({ teams, hasBankDetails }: { teams: { id: st
   const paymentTiming: 'AFTER_PURCHASE' | 'ADVANCE' = alreadyBought ? 'AFTER_PURCHASE' : 'ADVANCE';
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    if (alreadyBought && !receiptUrl) {
+      e.preventDefault();
+      setError('Please upload the receipt before submitting an already-purchased expense.');
+      return;
+    }
     if (!hasBankDetails) {
       e.preventDefault();
       setShowBankPrompt(true);
@@ -57,7 +62,7 @@ export default function ExpenseForm({ teams, hasBankDetails }: { teams: { id: st
 
       <div><label className="field-label">Team</label><select name="teamId" required className="field-control">{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
       <div><label className="field-label">What's this expense for?</label><input name="description" required className="field-control" placeholder="e.g. Train tickets for conference"/></div>
-      <div><label className="field-label">Amount</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">£</span><input type="number" step="0.01" min="0.01" name="amount" onWheel={(e) => e.currentTarget.blur()} required className="field-control h-10 pl-7 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/></div></div>
+      <div><label className="field-label">Amount</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">£</span><input type="number" step="0.01" min="0.01" name="amount" required className="field-control h-10 pl-7"/></div></div>
 
       <div>
         <p className="mb-2 block text-sm font-medium text-stone-700">Have you already bought this?</p>
@@ -72,7 +77,7 @@ export default function ExpenseForm({ teams, hasBankDetails }: { teams: { id: st
       <div><label className="field-label">Receipt {alreadyBought?<span className="text-rose-600">(required)</span>:<span className="text-slate-400">(optional for now)</span>}</label>{!receiptUrl?<label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border-2 border-dashed border-stone-300 py-6 text-sm text-stone-500 hover:border-[#C99600] hover:text-[#C99600]"><Upload size={16}/>{busy?'Uploading…':'Upload receipt (image or PDF)'}<input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFile} disabled={busy}/></label>:<div className="flex items-center gap-3 rounded-md border border-stone-200 p-3">{receiptType==='application/pdf'?<div className="grid h-16 w-16 shrink-0 place-items-center rounded bg-slate-100 text-xs font-bold text-slate-600">PDF</div>:<img src={receiptPreviewUrl||receiptUrl} alt="Receipt preview" className="h-16 w-16 rounded object-cover"/>}<div className="min-w-0 flex-1"><p className="truncate text-sm text-stone-700">{receiptName}</p><button type="button" onClick={()=>{setReceiptUrl(null);setReceiptPreviewUrl(null);setReceiptType('');setReceiptName('')}} className="mt-1 flex items-center gap-1 text-xs text-rose-600"><Trash2 size={12}/> Remove</button></div></div>}{!alreadyBought&&<p className="mt-2 text-xs text-slate-500">You'll be reminded to upload proof after purchase.</p>}</div>
 
       <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{alreadyBought?'The receipt is required as proof of payment.':'After purchase, upload the receipt and actual amount you paid; the app will calculate any balance to return or extra reimbursement.'}</div>
-      <SubmitExpenseButton busy={busy}/>
+      <SubmitExpenseButton busy={busy} disabled={alreadyBought && !receiptUrl} />
     </form>
 
     {showBankPrompt && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" aria-labelledby="bank-details-required-title">

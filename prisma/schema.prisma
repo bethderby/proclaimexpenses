@@ -178,4 +178,5 @@ model Expense {
   wiseBatchGroupId   String?
   wiseStatus         String?
   relatedExpenseId   String?
+  wasInCancelledPaymentRun Boolean @default(false)
 }

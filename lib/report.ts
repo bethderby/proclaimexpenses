@@ -14,7 +14,7 @@ async function getReportRecipients(configured?: string[]) {
 
 export async function sendCombinedReport(start: Date, end: Date, opts: { manual?: boolean; recipients?: string[] } = {}) {
   const expenses = await prisma.expense.findMany({
-    where: { date: { gte: start, lt: end } },
+    where: { date: { gte: start, lt: end }, status: { notIn: ['CANCELLED', 'REJECTED', 'PAYMENT_FAILED'] }, paymentStatus: { not: 'FAILED' } },
     include: { user: true, team: true },
     orderBy: { date: 'asc' },
   });

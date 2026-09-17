@@ -5,7 +5,6 @@ const META: Record<string, { label: string; icon: any; cls: string }> = {
   APPROVED: { label: 'Approved', icon: CheckCircle2, cls: 'bg-[#FFF8E1] text-[#C99600] border-[#F3D36A]' },
   REJECTED: { label: 'Rejected', icon: XCircle, cls: 'bg-rose-50 text-rose-700 border-rose-200' },
   CANCELLED: { label: 'Cancelled', icon: Ban, cls: 'bg-slate-100 text-slate-600 border-slate-200' },
-  AWAITING_PURCHASE: { label: 'Awaiting purchase', icon: ShoppingCart, cls: 'bg-blue-50 text-blue-700 border-blue-200' },
   READY_TO_PAY: { label: 'Ready to pay', icon: CreditCard, cls: 'bg-violet-50 text-violet-700 border-violet-200' },
   PAYMENT_PENDING: { label: 'Payment pending', icon: CreditCard, cls: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
   ADVANCE_PAID_AWAITING_RECEIPT: { label: 'Advance paid · receipt needed', icon: ReceiptText, cls: 'bg-orange-50 text-orange-700 border-orange-200' },
