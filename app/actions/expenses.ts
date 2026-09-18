@@ -1,7 +1,6 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { encryptBankDetail } from '@/lib/bank';
 import { parseMoney, roundMoney, errorMessage } from '@/lib/money';
@@ -10,7 +9,7 @@ import { notify, renderEmail } from '@/lib/notify';
 import { isWiseConfigured } from '@/lib/wise';
 import { autoCompleteWiseBatchIfApprovalsAreComplete } from '@/lib/wise-batch';
 import { requireUser, getTeamApproverEmails } from './shared';
-import { createWisePaymentRun } from './payments';
+import { createWisePaymentRunForUser } from '@/lib/wise-batch';
 
 export async function submitExpense(formData: FormData) {
   const user = await requireUser();
@@ -68,7 +67,7 @@ export async function submitExpense(formData: FormData) {
   await notify(approverEmails, `Expense needs approval - £${amount.toFixed(2)}`, html, text);
 
   revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard');
-  redirect('/dashboard/expenses');
+  return { success: true, expenseId: expense.id };
 }
 
 export async function updateExpense(formData: FormData) {
@@ -197,7 +196,7 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
   if (isWiseConfigured()) {
     try {
       if (decision === 'APPROVED' && paymentStatus === 'READY') {
-        await createWisePaymentRun();
+        await createWisePaymentRunForUser(user.id, user.isAdmin, email);
         wisePreparedAutomatically = true;
       }
 

@@ -1,6 +1,7 @@
 'use client';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { AlertCircle, CheckCircle2, Trash2, Upload, X } from 'lucide-react';
 import { submitExpense } from '@/app/actions/expenses';
 import { errorMessage } from '@/lib/money';
@@ -17,7 +18,10 @@ export default function ExpenseForm({ teams, hasBankDetails }: { teams: { id: st
   const [receiptName, setReceiptName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [showBankPrompt, setShowBankPrompt] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
   const MAX_FILE_SIZE = 4 * 1024 * 1024;
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -46,6 +50,8 @@ export default function ExpenseForm({ teams, hasBankDetails }: { teams: { id: st
   const paymentTiming: 'AFTER_PURCHASE' | 'ADVANCE' = alreadyBought ? 'AFTER_PURCHASE' : 'ADVANCE';
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    setError('');
+    setSuccess('');
     if (alreadyBought && !receiptUrl) {
       e.preventDefault();
       setError('Please upload the receipt before submitting an already-purchased expense.');
@@ -58,8 +64,29 @@ export default function ExpenseForm({ teams, hasBankDetails }: { teams: { id: st
   }
 
   return <>
-    <form action={submitExpense} onSubmit={handleSubmit} className="panel space-y-5 p-5 sm:p-6">
-      {error && <p className="flex items-center gap-1.5 text-sm text-rose-600"><AlertCircle size={14}/>{error}</p>}
+    <form
+      ref={formRef}
+      action={async fd => {
+        try {
+          await submitExpense(fd);
+          setSuccess('Expense submitted successfully. Your approver has been notified.');
+          setError('');
+          formRef.current?.reset();
+          setPurchaseStatus('ALREADY_PURCHASED');
+          setReceiptUrl(null);
+          setReceiptPreviewUrl(null);
+          setReceiptType('');
+          setReceiptName('');
+          router.refresh();
+        } catch (err) {
+          setError(errorMessage(err, 'We could not submit this expense. Please check the details and try again.'));
+          setSuccess('');
+        }
+      }}
+      onSubmit={handleSubmit}
+      className="panel space-y-5 p-5 sm:p-6">
+      {success && <p role="status" className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-700"><CheckCircle2 size={15}/>{success}</p>}
+      {error && <p role="alert" className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm font-medium text-rose-700"><AlertCircle size={14}/>{error}</p>}
       <input type="hidden" name="receiptUrl" value={receiptUrl ?? ''}/>
       <input type="hidden" name="purchaseStatus" value={purchaseStatus}/>
       <input type="hidden" name="paymentTiming" value={paymentTiming}/>
