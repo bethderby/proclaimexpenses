@@ -89,6 +89,7 @@ export async function updateExpense(formData: FormData) {
   await prisma.expense.update({ where: { id: expenseId }, data: { date: new Date(date), description, amount, teamId } });
   await recordAuditEvent({ actor: user, action: 'EXPENSE_UPDATED', entityType: 'EXPENSE', entityId: expenseId, expenseId, teamId, targetUserId: expense.userId, summary: `Expense updated to £${amount.toFixed(2)}`, metadata: { date, description, amount, previousTeamId: expense.teamId } });
   revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard');
+  return { success: true, message: 'Expense edited successfully.' };
 }
 
 export async function cancelExpense(formData: FormData) {
