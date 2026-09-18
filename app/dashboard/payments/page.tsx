@@ -10,7 +10,7 @@ import PaymentRunFilter from '@/components/PaymentRunFilter';
 
 const isoFirstOfMonth=()=>{const now=new Date();return new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10)};
 const isoToday=()=>new Date().toISOString().slice(0,10);
-const runStatusLabel=(status:string)=>({DRAFT:'Draft',WISE_OPEN:'Open batch',WISE_RECOVERY_REQUIRED:'Recovery required',WISE_PREPARED:'Prepared',WISE_CANCELLING:'Cancelling…',WISE_FUNDED:'Funded',COMPLETED:'Completed',CANCELLED:'Cancelled'} as Record<string,string>)[status]||status;
+const runStatusLabel=(status:string)=>({DRAFT:'Draft',WISE_OPEN:'Open batch',WISE_RECOVERY_REQUIRED:'Recovery required',WISE_PREPARED:'Prepared',WISE_FUNDED:'Funded',COMPLETED:'Completed',CANCELLED:'Cancelled'} as Record<string,string>)[status]||status;
 
 const money=(n:number)=>`£${n.toFixed(2)}`;
 export default async function PaymentsPage({searchParams}:{searchParams:{from?:string;to?:string;status?:string}}){
