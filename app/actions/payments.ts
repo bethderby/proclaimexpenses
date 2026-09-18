@@ -128,12 +128,14 @@ export async function cancelPaymentRun(formData: FormData) {
   if (run.status === 'COMPLETED') throw new Error('A completed payment run cannot be cancelled.');
 
   const batchLeaseToken = run.status === 'WISE_OPEN' ? await acquireWiseBatchLease() : null;
+  let finalWiseStatus = 'cancelled';
   try {
     if (run.wiseBatchGroupId) {
       const batch = await getWiseBatchGroup(run.wiseBatchGroupId);
       const batchStatus = String(batch.status || '').toUpperCase();
+      finalWiseStatus = batchStatus === 'CANCELLED' ? 'cancelled' : batchStatus.toLowerCase();
 
-      if (batchStatus === 'COMPLETED' || batchStatus === 'NEW' || ['MARKED_FOR_CANCELLATION', 'PROCESSING_CANCEL'].includes(batchStatus)) {
+      if (batchStatus === 'COMPLETED' || batchStatus === 'NEW') {
         const transferIds = Array.isArray(batch.transferIds) ? batch.transferIds.map((id: unknown) => String(id)) : [];
         const localTransferIds = run.expenses.map(e => e.wiseTransferId).filter(Boolean).map(String);
         const allTransferIds = [...new Set([...transferIds, ...localTransferIds])];
@@ -153,14 +155,16 @@ export async function cancelPaymentRun(formData: FormData) {
       if (batchStatus === 'NEW') {
         await cancelWiseBatchGroup(run.wiseBatchGroupId, Number(batch.version));
       } else if (batchStatus === 'MARKED_FOR_CANCELLATION' || batchStatus === 'PROCESSING_CANCEL') {
-        // Wise is already cancelling it; keep the local run locked until the
-        // next sync observes CANCELLED.
-        throw new Error('Wise is still cancelling this batch. Sync Wise status again in a moment.');
+        // Wise cancellation is asynchronous. If cancellation has already been
+        // requested, do not make the user click Cancel again while Wise moves
+        // the batch through its cancellation states. We can safely make the
+        // local run cancelled now; a later sync will keep it cancelled and will
+        // update the Wise status to CANCELLED once Wise has finished.
       }
     }
 
     await prisma.$transaction(async tx => {
-      await tx.paymentRun.update({ where: { id: runId }, data: { status: 'CANCELLED', wiseStatus: 'cancelled', preparationKey: null } });
+      await tx.paymentRun.update({ where: { id: runId }, data: { status: 'CANCELLED', wiseStatus: finalWiseStatus, preparationKey: null } });
       await tx.expense.updateMany({
         where: { paymentRunId: runId, status: 'PAYMENT_PENDING' },
         data: {

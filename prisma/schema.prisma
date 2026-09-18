@@ -64,6 +64,7 @@ model Team {
   name          String   @unique
   approverEmails String[] @default([])
   budgetTarget   Decimal  @default(0) @db.Decimal(12, 2)
+  archivedAt     DateTime?
   expenses       Expense[]
   auditEvents    AuditEvent[]
 }

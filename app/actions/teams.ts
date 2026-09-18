@@ -8,7 +8,7 @@ import { requireUser } from './shared';
 
 export async function updateBudget(teamId: string, target: number) {
   const user = await requireUser();
-  const team = await prisma.team.findUnique({ where: { id: teamId } });
+  const team = await prisma.team.findUnique({ where: { id: teamId, archivedAt: null } });
   if (!team) throw new Error('Team not found.');
   const allowed = user.isAdmin || team.approverEmails.some(e => e.toLowerCase() === (user.email ?? '').toLowerCase());
   if (!allowed) throw new Error("Only this team's configured approver or an admin can change its budget.");
@@ -49,10 +49,16 @@ export async function deleteTeam(formData: FormData) {
   const teamId = String(formData.get('teamId') || '');
   if (!user.isAdmin) throw new Error('Only admins can delete teams.');
   if (!teamId) throw new Error('Team not found.');
+  const team = await prisma.team.findUnique({ where: { id: teamId }, select: { id: true, name: true, archivedAt: true } });
+  if (!team) throw new Error('Team not found.');
+  if (team.archivedAt) return;
+
+  // Teams are archived rather than physically deleted. Expenses are financial
+  // records and must never disappear just because their team is retired. The
+  // Team relation remains intact so historical expenses, payment runs and
+  // audit history continue to display the original team name.
   await prisma.$transaction(async tx => {
-    // Record the deletion before removing the team. The AuditEvent.teamId
-    // relation is ON DELETE SET NULL, so the audit record survives while its
-    // team link is cleared by PostgreSQL after the team is deleted.
+    await tx.team.update({ where: { id: teamId }, data: { archivedAt: new Date() } });
     await tx.auditEvent.create({
       data: auditEventData({
         actor: user,
@@ -60,12 +66,10 @@ export async function deleteTeam(formData: FormData) {
         entityType: 'TEAM',
         entityId: teamId,
         teamId,
-        summary: 'Team deleted',
-        metadata: { teamId },
+        summary: 'Team archived',
+        metadata: { teamId, teamName: team.name },
       }),
     });
-    await tx.expense.deleteMany({ where: { teamId } });
-    await tx.team.delete({ where: { id: teamId } });
   });
   revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history'); revalidatePath('/dashboard/reports'); revalidatePath('/dashboard/approvals');
 }

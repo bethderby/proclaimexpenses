@@ -85,7 +85,7 @@ export async function updateExpense(formData: FormData) {
   if (!expense) throw new Error('You can only edit your own expenses.');
   if (expense.status !== 'PENDING') throw new Error('Only expenses still awaiting approval can be edited.');
   if (expense.relatedExpenseId) throw new Error('Additional reimbursements created from an advance cannot be edited by the requester.');
-  const team = await prisma.team.findUnique({ where: { id: teamId } });
+  const team = await prisma.team.findUnique({ where: { id: teamId, archivedAt: null } });
   if (!team) throw new Error('That team no longer exists.');
   await prisma.expense.update({ where: { id: expenseId }, data: { date: new Date(date), description, amount, teamId } });
   await recordAuditEvent({ actor: user, action: 'EXPENSE_UPDATED', entityType: 'EXPENSE', entityId: expenseId, expenseId, teamId, targetUserId: expense.userId, summary: `Expense updated to £${amount.toFixed(2)}`, metadata: { date, description, amount, previousTeamId: expense.teamId } });
