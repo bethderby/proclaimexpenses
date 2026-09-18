@@ -13,6 +13,7 @@ export function PrepareWiseButton({ disabled }: { disabled: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   async function submit() {
     if (disabled || busy) return;
@@ -59,6 +60,7 @@ export function PaymentRunActions({
   const router = useRouter();
   const [busy, setBusy] = useState<'sync' | 'cancel' | null>(null);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const canAct = status !== 'COMPLETED' && status !== 'CANCELLED';
 
@@ -73,6 +75,7 @@ export function PaymentRunActions({
 
     setBusy(kind);
     setError('');
+    setSuccess('');
 
     try {
       const formData = new FormData();
@@ -80,8 +83,10 @@ export function PaymentRunActions({
 
       if (kind === 'sync') {
         await syncWisePaymentRun(formData);
+        setSuccess('Wise status synced successfully.');
       } else {
         await cancelPaymentRun(formData);
+        setSuccess('Cancellation requested successfully. Wise may take a moment to finish cancelling the batch. The affected expenses will return to Pending once cancellation is confirmed.');
       }
 
       router.refresh();
@@ -125,6 +130,11 @@ export function PaymentRunActions({
       {status === 'WISE_CANCELLING' && !error && (
         <p className="max-w-md text-xs font-medium text-slate-500 sm:text-right">
           Cancellation requested. Waiting for Wise to confirm the final transfer states.
+        </p>
+      )}
+      {success && (
+        <p role="status" className="max-w-md rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs font-medium text-emerald-700 sm:text-right">
+          {success}
         </p>
       )}
       {error && (
