@@ -117,125 +117,114 @@ export async function syncWisePaymentRun(formData: FormData) {
 export async function cancelPaymentRun(formData: FormData) {
   const user = await requireUser();
   if (!user.isAdmin && !user.isApprover) throw new Error('Only approvers or admins can cancel payment runs.');
+
   const runId = String(formData.get('runId') || '');
-  const run = await prisma.paymentRun.findUnique({ where: { id: runId }, include: { expenses: { include: { team: true, user: true } } } });
+  if (!runId) throw new Error('Payment run not found.');
+
+  const run = await prisma.paymentRun.findUnique({
+    where: { id: runId },
+    include: { expenses: { include: { team: true, user: true } } },
+  });
   if (!run) throw new Error('Payment run not found.');
+
   if (!user.isAdmin) {
     const email = (user.email ?? '').toLowerCase();
-    const allowed = run.expenses.length > 0 && run.expenses.every((e) => e.team.approverEmails.some((a) => a.toLowerCase() === email));
+    const allowed = run.expenses.length > 0 &&
+      run.expenses.every((e) => e.team.approverEmails.some((a) => a.toLowerCase() === email));
     if (!allowed) throw new Error('You are not authorised to cancel this payment batch.');
   }
+
   if (run.status === 'COMPLETED') throw new Error('A completed payment run cannot be cancelled.');
+  if (run.status === 'CANCELLED') return;
 
-  const batchLeaseToken = run.status === 'WISE_OPEN' ? await acquireWiseBatchLease() : null;
-  let finalWiseStatus = 'cancelled';
+  const batchLeaseToken = await acquireWiseBatchLease();
   try {
-    if (run.wiseBatchGroupId) {
-      const batch = await getWiseBatchGroup(run.wiseBatchGroupId);
-      const batchStatus = String(batch.status || '').toUpperCase();
-      finalWiseStatus = batchStatus === 'CANCELLED' ? 'cancelled' : batchStatus.toLowerCase();
+    // Claim the run locally before touching Wise. This is important because
+    // Wise cancellation can be asynchronous: webhooks must still be able to
+    // find the paymentRunId from the affected expenses while Wise settles the
+    // individual transfers.
+    await prisma.paymentRun.update({
+      where: { id: runId },
+      data: { status: 'WISE_CANCELLING', wiseStatus: 'CANCELLING' },
+    });
 
-      if (batchStatus === 'COMPLETED' || batchStatus === 'NEW') {
-        const transferIds = Array.isArray(batch.transferIds) ? batch.transferIds.map((id: unknown) => String(id)) : [];
-        const localTransferIds = run.expenses.map(e => e.wiseTransferId).filter(Boolean).map(String);
+    if (run.wiseBatchGroupId) {
+      let batch = await getWiseBatchGroup(run.wiseBatchGroupId);
+      const batchStatus = String(batch.status || '').toUpperCase();
+
+      if (batchStatus === 'NEW') {
+        try {
+          batch = await cancelWiseBatchGroup(run.wiseBatchGroupId, Number(batch.version));
+        } catch (error) {
+          console.error('Wise batch cancellation request failed', runId, error);
+        }
+      } else if (batchStatus === 'COMPLETED') {
+        const transferIds = Array.isArray(batch.transferIds)
+          ? batch.transferIds.map((id: unknown) => String(id))
+          : [];
+        const localTransferIds = run.expenses
+          .map((e) => e.wiseTransferId)
+          .filter(Boolean)
+          .map(String);
         const allTransferIds = [...new Set([...transferIds, ...localTransferIds])];
+
+        // Cancel every transfer that is still explicitly cancellable. A
+        // transfer caught in a transient Wise state must not abort the whole
+        // run after earlier transfers have already been cancelled. The
+        // webhook/cron will reconcile it again once Wise changes its state.
         for (const transferId of allTransferIds) {
-          const transfer = await getWiseTransfer(transferId);
-          const state = String(transfer.status || '').toLowerCase();
-          if (state === 'incoming_payment_waiting') {
-            await cancelWiseTransfer(transferId);
-          } else if (!['cancelled', 'bounced_back', 'funds_refunded'].includes(state)) {
-            throw new Error(`Wise transfer ${transferId} cannot be cancelled because it is already ${transfer.status}.`);
+          try {
+            const transfer = await getWiseTransfer(transferId);
+            const state = String(transfer.status || '').toLowerCase();
+
+            if (state === 'incoming_payment_waiting') {
+              await cancelWiseTransfer(transferId);
+            } else if (state === 'outgoing_payment_sent') {
+              // Money has already left Wise. Never attempt to cancel it.
+            } else if (!['cancelled', 'bounced_back', 'funds_refunded'].includes(state)) {
+              // Transient state such as incoming_payment_initiated,
+              // processing, or funds_converted. Leave it alone for now and
+              // let the next webhook/cron reconciliation decide its outcome.
+            }
+          } catch (error) {
+            console.error('Wise transfer cancellation request failed', { runId, transferId, error });
           }
         }
-      }
-
-      // If the batch itself is still editable, cancel it too. A completed batch
-      // is closed; its individual unfunded transfers were handled above.
-      if (batchStatus === 'NEW') {
-        await cancelWiseBatchGroup(run.wiseBatchGroupId, Number(batch.version));
       } else if (batchStatus === 'MARKED_FOR_CANCELLATION' || batchStatus === 'PROCESSING_CANCEL') {
-        // Wise cancellation is asynchronous. If cancellation has already been
-        // requested, do not make the user click Cancel again while Wise moves
-        // the batch through its cancellation states. We can safely make the
-        // local run cancelled now; a later sync will keep it cancelled and will
-        // update the Wise status to CANCELLED once Wise has finished.
+        // Wise has already accepted the cancellation request. Do not ask the
+        // user to click Cancel again while Wise finishes it.
+      } else if (batchStatus === 'CANCELLED') {
+        // Already cancelled in Wise. The reconciliation below will return
+        // the affected expenses to Pending immediately.
       }
     }
 
-    await prisma.$transaction(async tx => {
-      await tx.paymentRun.update({ where: { id: runId }, data: { status: 'CANCELLED', wiseStatus: finalWiseStatus, preparationKey: null } });
-      await tx.expense.updateMany({
-        where: { paymentRunId: runId, status: 'PAYMENT_PENDING' },
-        data: {
-          paymentRunId: null,
-          paymentStatus: 'NOT_READY',
-          status: 'PENDING',
-          approvedAmount: null,
-          decisionNote: 'Payment run was cancelled. Approval is required again.',
-          decidedAt: null,
-          paymentReference: null,
-          wiseBatchGroupId: null,
-          wiseTransferId: null,
-          wiseStatus: null,
-          wasInCancelledPaymentRun: true,
-        },
-      });
-    });
+    // Re-read Wise immediately after requesting cancellation. If Wise has
+    // already settled the batch/transfers, this finishes the cancellation in
+    // the same click. Otherwise the run remains WISE_CANCELLING and the
+    // webhook/cron will finish it automatically.
+    try {
+      await syncWisePaymentRunById(runId);
+    } catch (error) {
+      console.error('Wise cancellation reconciliation deferred', runId, error);
+    }
   } finally {
-    if (batchLeaseToken) await releaseWiseBatchLease(batchLeaseToken);
-  }
-  await recordAuditEvent({ actor: user, action: 'PAYMENT_RUN_CANCELLED', entityType: 'PAYMENT_RUN', entityId: runId, paymentRunId: runId, summary: 'Wise payment batch cancelled', metadata: { runId } });
-  const cancelledByEmail = new Map<string, typeof run.expenses>();
-  for (const expense of run.expenses) {
-    if (expense.paymentStatus !== 'PAID' && expense.status === 'PAYMENT_PENDING' && expense.user.email) {
-      const email = expense.user.email.trim().toLowerCase();
-      if (!email) continue;
-      const existing = cancelledByEmail.get(email) ?? [];
-      existing.push(expense);
-      cancelledByEmail.set(email, existing);
-    }
-  }
-  for (const [email, expenses] of cancelledByEmail) {
-    const details = expenses.map(e => `£${e.amount.toFixed(2)} - ${e.description}`).join('\n');
-    const { html, text } = renderEmail({
-      heading: 'Payment batch cancelled',
-      intro: 'Your payment batch was cancelled, so the affected expense(s) have been returned to Pending and must be approved again before they can be paid.',
-      plainTextExtra: `Expenses returned to approval:\n${details}`,
-      ctaPath: '/dashboard/expense-history',
-      ctaLabel: 'View expenses',
-    });
-    await notify(email, 'Payment batch cancelled - approval required again', html, text);
+    await releaseWiseBatchLease(batchLeaseToken);
   }
 
-  // Notify the configured approvers for the affected teams as well. The
-  // cancellation clears the previous approval, so these expenses need to be
-  // reviewed and approved again before they can enter a new payment batch.
-  const approverEmails = new Set<string>();
-  for (const expense of run.expenses) {
-    if (expense.paymentStatus !== 'PAID' && expense.status === 'PAYMENT_PENDING') {
-      for (const email of expense.team.approverEmails) {
-        const normalized = email.trim().toLowerCase();
-        if (normalized) approverEmails.add(normalized);
-      }
-    }
-  }
+  await recordAuditEvent({
+    actor: user,
+    action: 'PAYMENT_RUN_CANCEL_REQUESTED',
+    entityType: 'PAYMENT_RUN',
+    entityId: runId,
+    paymentRunId: runId,
+    summary: 'Wise payment batch cancellation requested',
+    metadata: { runId },
+  });
 
-  const affectedDetails = [...cancelledByEmail.values()]
-    .flat()
-    .map(e => `£${e.amount.toFixed(2)} - ${e.description}`)
-    .join('\n');
-
-  if (affectedDetails && approverEmails.size > 0) {
-    const { html, text } = renderEmail({
-      heading: 'Payment batch cancelled - approval required',
-      intro: 'A payment batch has been cancelled. The affected expense(s) have been returned to Pending and the previous approval has been cleared. Please review and approve them again before they can be paid.',
-      plainTextExtra: `Expenses returned to approval:\n${affectedDetails}`,
-      ctaPath: '/dashboard/approvals',
-      ctaLabel: 'Review approvals',
-    });
-    await notify([...approverEmails], 'Payment batch cancelled - approval required again', html, text);
-  }
-
-  revalidatePath('/dashboard/payments'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history');
+  revalidatePath('/dashboard/payments');
+  revalidatePath('/dashboard/expenses');
+  revalidatePath('/dashboard/expense-history');
+  revalidatePath('/dashboard');
 }
+

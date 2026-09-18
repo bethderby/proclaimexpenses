@@ -108,18 +108,25 @@ export function PaymentRunActions({
             >
               {busy === 'sync' ? 'Syncing…' : 'Sync Wise status'}
             </button>
-            <button
-              type="button"
-              onClick={() => runAction('cancel')}
-              disabled={busy !== null}
-              aria-busy={busy === 'cancel'}
-              className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {busy === 'cancel' ? 'Cancelling…' : 'Cancel run'}
-            </button>
+            {status !== 'WISE_CANCELLING' && (
+              <button
+                type="button"
+                onClick={() => runAction('cancel')}
+                disabled={busy !== null}
+                aria-busy={busy === 'cancel'}
+                className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busy === 'cancel' ? 'Cancelling…' : 'Cancel run'}
+              </button>
+            )}
           </>
         )}
       </div>
+      {status === 'WISE_CANCELLING' && !error && (
+        <p className="max-w-md text-xs font-medium text-slate-500 sm:text-right">
+          Cancellation requested. Waiting for Wise to confirm the final transfer states.
+        </p>
+      )}
       {error && (
         <p role="alert" className="max-w-md text-xs font-medium text-rose-700 sm:text-right">
           {error}

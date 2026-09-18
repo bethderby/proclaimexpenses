@@ -3,7 +3,17 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { recordAuditEvent } from '@/lib/audit';
 import { getWiseBatchGroup, getWiseTransfer } from '@/lib/wise';
-import { notify, escapeHtml } from '@/lib/notify';
+import { notify, escapeHtml, renderEmail } from '@/lib/notify';
+
+function renderCancellationEmail(details: string, ctaPath: string, ctaLabel: string, intro: string) {
+  return renderEmail({
+    heading: 'Payment batch cancelled',
+    intro,
+    plainTextExtra: `Expenses returned to approval:\n${details}`,
+    ctaPath,
+    ctaLabel,
+  });
+}
 
 export function deterministicWiseTransactionId(paymentRunId: string, expenseId: string) {
   const hash = crypto.createHash('sha256').update(`proclaim-payment-run:${paymentRunId}:expense:${expenseId}`).digest('hex');
@@ -12,7 +22,7 @@ export function deterministicWiseTransactionId(paymentRunId: string, expenseId: 
 
 export async function syncWisePaymentRunById(runId: string) {
 
-  const run = await prisma.paymentRun.findUnique({ where: { id: runId }, include: { expenses: true } });
+  const run = await prisma.paymentRun.findUnique({ where: { id: runId }, include: { expenses: { include: { user: true, team: true } } } });
   if (!run?.wiseBatchGroupId) throw new Error('Wise batch not found for this payment run.');
 
   const batch = await getWiseBatchGroup(run.wiseBatchGroupId);
@@ -55,21 +65,23 @@ export async function syncWisePaymentRunById(runId: string) {
   const batchStatus = String(batch.status || 'UNKNOWN');
   const batchCancelled = ['CANCELLED'].includes(batchStatus);
   const prepared = ['COMPLETED'].includes(batchStatus);
+  const cancellationSettled = batchCancelled || (run.status === 'WISE_CANCELLING' && allComplete);
 
   const appUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
   const expensesUrl = `${appUrl}/dashboard/expense-history`;
   const paidNotifications: { email: string; subject: string; html: string; text: string }[] = [];
   const failedNotifications: { email: string; subject: string; html: string; text: string }[] = [];
+  const cancellationNotifications: { email: string; subject: string; html: string; text: string }[] = [];
 
   await prisma.$transaction(async tx => {
-    let nextStatus: 'WISE_OPEN' | 'WISE_PREPARED' | 'WISE_RECOVERY_REQUIRED' | 'COMPLETED' | 'CANCELLED' = 'WISE_RECOVERY_REQUIRED';
-    // A locally cancelled payment run must stay cancelled. After cancellation
-    // the expenses are detached from the run, so a later sync can otherwise
-    // see zero remaining transfers and incorrectly reclassify a completed Wise
-    // batch as WISE_PREPARED.
-    if (run.status === 'CANCELLED' || batchCancelled) nextStatus = 'CANCELLED';
+    let nextStatus: 'WISE_OPEN' | 'WISE_PREPARED' | 'WISE_RECOVERY_REQUIRED' | 'WISE_CANCELLING' | 'COMPLETED' | 'CANCELLED' = 'WISE_RECOVERY_REQUIRED';
+    // Never turn a cancellation that is still being reconciled into Prepared.
+    // The webhook/cron can call this repeatedly while Wise settles the
+    // individual transfers.
+    if (allSuccessful) nextStatus = 'COMPLETED';
+    else if (run.status === 'CANCELLED' || cancellationSettled) nextStatus = 'CANCELLED';
+    else if (run.status === 'WISE_CANCELLING') nextStatus = 'WISE_CANCELLING';
     else if (batchStatus === 'NEW' && run.status === 'WISE_OPEN') nextStatus = 'WISE_OPEN';
-    else if (allSuccessful) nextStatus = 'COMPLETED';
     else if (prepared && (allComplete || (refreshed.length > 0 && transfers.length === refreshed.length))) nextStatus = 'WISE_PREPARED';
 
     await tx.paymentRun.update({
@@ -116,8 +128,9 @@ export async function syncWisePaymentRunById(runId: string) {
         }
       } else {
         const transferFailed = ['bounced_back','funds_refunded','cancelled'].includes(state);
-        await tx.expense.update({ where: { id: expense.id }, data: { wiseStatus: state, ...(transferFailed ? { status: 'PAYMENT_FAILED', paymentStatus: 'FAILED' } : {}) } });
-        if (transferFailed) {
+        const cancellationFlow = run.status === 'WISE_CANCELLING' || batchCancelled;
+        await tx.expense.update({ where: { id: expense.id }, data: { wiseStatus: state, ...((transferFailed && !cancellationFlow) ? { status: 'PAYMENT_FAILED', paymentStatus: 'FAILED' } : {}) } });
+        if (transferFailed && !cancellationFlow) {
           const subject = `Payment failed - £${expense.amount.toFixed(2)}`;
           const recipientName = expense.user.name || expense.user.email || 'The requester';
           const approverEmails = expense.team.approverEmails
@@ -143,7 +156,7 @@ ${expensesUrl || ''}`,
       }
     }
 
-    if (batchCancelled) {
+    if (cancellationSettled) {
       await tx.expense.updateMany({
         where: { paymentRunId: runId, paymentStatus: { not: 'PAID' } },
         data: {
@@ -161,6 +174,52 @@ ${expensesUrl || ''}`,
       });
     }
   });
+
+  if (cancellationSettled) {
+    const cancelledExpenses = transfers.flatMap((transfer) => {
+      const expense = refreshed.find(e => e.wiseTransferId === String(transfer.id));
+      const state = String(transfer.status || '').toLowerCase();
+      return expense && ['cancelled', 'bounced_back', 'funds_refunded'].includes(state) && expense.paymentStatus !== 'PAID'
+        ? [expense]
+        : [];
+    });
+
+    const details = cancelledExpenses.map(e => `£${e.amount.toFixed(2)} - ${e.description}`).join('\n');
+    if (details) {
+      const requesterEmails = new Map<string, typeof cancelledExpenses>();
+      const approverEmails = new Set<string>();
+
+      for (const expense of cancelledExpenses) {
+        if (expense.user.email) {
+          const email = expense.user.email.trim().toLowerCase();
+          if (email) {
+            const existing = requesterEmails.get(email) ?? [];
+            existing.push(expense);
+            requesterEmails.set(email, existing);
+          }
+        }
+        for (const email of expense.team.approverEmails) {
+          const normalized = email.trim().toLowerCase();
+          if (normalized) approverEmails.add(normalized);
+        }
+      }
+
+      for (const [email, expenses] of requesterEmails) {
+        const requesterDetails = expenses.map(e => `£${e.amount.toFixed(2)} - ${e.description}`).join('\n');
+        const { html, text } = renderCancellationEmail(requesterDetails, '/dashboard/expense-history', 'View expenses',
+          'Your payment batch was cancelled, so the affected expense(s) have been returned to Pending and must be approved again before they can be paid.');
+        cancellationNotifications.push({ email, subject: 'Payment batch cancelled - approval required again', html, text });
+      }
+
+      if (approverEmails.size > 0) {
+        const { html, text } = renderCancellationEmail(details, '/dashboard/approvals', 'Review approvals',
+          'A payment batch has been cancelled. The affected expense(s) have been returned to Pending and the previous approval has been cleared. Please review and approve them again before they can be paid.');
+        for (const email of approverEmails) {
+          cancellationNotifications.push({ email, subject: 'Payment batch cancelled - approval required again', html, text });
+        }
+      }
+    }
+  }
 
   for (const transfer of transfers) {
     const expense = refreshed.find(e => e.wiseTransferId === String(transfer.id));
@@ -186,6 +245,10 @@ ${expensesUrl || ''}`,
   }
 
   for (const n of failedNotifications) {
+    await notify(n.email, n.subject, n.html, n.text);
+  }
+
+  for (const n of cancellationNotifications) {
     await notify(n.email, n.subject, n.html, n.text);
   }
 
