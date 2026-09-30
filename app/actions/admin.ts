@@ -37,3 +37,18 @@ export async function removeUser(formData: FormData) {
   await recordAuditEvent({ actor: user, action: 'USER_REMOVED', entityType: 'USER', entityId: target.id, targetUserId: target.id, summary: `User removed: ${email}`, metadata: { email } });
   revalidatePath('/dashboard/teams'); revalidatePath('/dashboard/approvals'); revalidatePath('/dashboard/expenses'); revalidatePath('/dashboard/expense-history');
 }
+
+export async function setWiseEnabled(formData: FormData) {
+  const user = await requireUser();
+  if (!user.isAdmin) throw new Error('Only admins can change the Wise integration setting.');
+  const wiseEnabled = String(formData.get('wiseEnabled')) === 'true';
+  await prisma.appSettings.upsert({
+    where: { id: 'default' },
+    update: { wiseEnabled },
+    create: { id: 'default', wiseEnabled },
+  });
+  await recordAuditEvent({ actor: user, action: wiseEnabled ? 'WISE_INTEGRATION_ENABLED' : 'WISE_INTEGRATION_DISABLED', entityType: 'APP_SETTINGS', entityId: 'default', summary: `Wise payment automation ${wiseEnabled ? 'enabled' : 'disabled'}`, metadata: { wiseEnabled } });
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/teams');
+  revalidatePath('/dashboard/payments');
+}

@@ -8,6 +8,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect('/login');
   const user = session.user;
+  const wiseEnabled = (await prisma.appSettings.findUnique({ where: { id: 'default' }, select: { wiseEnabled: true } }))?.wiseEnabled ?? true;
   const pendingCount = user.isAdmin
     ? await prisma.expense.count({ where: { status: 'PENDING' } })
     : user.isApprover
@@ -22,6 +23,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         isApprover={!!user.isApprover || !!user.isAdmin}
         isAdmin={!!user.isAdmin}
         pendingCount={pendingCount}
+        wiseEnabled={wiseEnabled}
       />
       <main className="app-main min-w-0 flex-1 px-4 pb-8 sm:px-6 lg:px-10 lg:pb-10">
         <div className="mx-auto w-full max-w-7xl">{children}</div>

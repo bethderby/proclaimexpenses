@@ -41,6 +41,7 @@ function MetricCard({
 export default async function DashboardPage(){
  const session=await getServerSession(authOptions);if(!session?.user)redirect('/login');const user=session.user;
  const pendingWhere:Prisma.ExpenseWhereInput=user.isAdmin?{status:'PENDING'}:user.isApprover?{status:'PENDING',team:{approverEmails:{has:(user.email??'').toLowerCase()}}}:{status:'PENDING',userId:user.id};
+ const wiseEnabled=(await prisma.appSettings.findUnique({where:{id:'default'},select:{wiseEnabled:true}}))?.wiseEnabled??true;
  const [expenses,expenseCount,expenseTotal,pending,needsReceipt,ready]=await Promise.all([
   prisma.expense.findMany({where:{userId:user.id},include:{team:true},orderBy:{submittedAt:'desc'},take:5}),
   prisma.expense.count({where:{userId:user.id}}),
@@ -64,7 +65,7 @@ export default async function DashboardPage(){
     <MetricCard label="My expenses" value={expenseCount} note={`${fmt(total)} across all expenses`} icon={ReceiptText} tone="gold" href="/dashboard/expense-history" />
     <MetricCard label="Waiting for approval" value={pending} note="Expenses not yet approved" icon={Clock3} tone="blue" href={user.isAdmin||user.isApprover?"/dashboard/approvals":"/dashboard/expense-history?status=PENDING"} />
     <MetricCard label="Receipt needed" value={needsReceipt} note="Advances awaiting receipt" icon={CheckCircle2} tone="green" href="/dashboard/expense-history?status=ADVANCE_PAID_AWAITING_RECEIPT" />
-    {(user.isAdmin||user.isApprover)&&<MetricCard label="Ready to pay" value={ready} note="Ready for payment runs" icon={CreditCard} tone="purple" href="/dashboard/payments" />}
+    {wiseEnabled&&(user.isAdmin||user.isApprover)&&<MetricCard label="Ready to pay" value={ready} note="Ready for payment runs" icon={CreditCard} tone="purple" href="/dashboard/payments" />}
   </section>
 
   <section className="panel dashboard-panel overflow-hidden">
@@ -82,7 +83,7 @@ export default async function DashboardPage(){
     </div>}
   </section>
 
-  {(user.isAdmin||user.isApprover)&&<section className="dashboard-action-strip">
+  {wiseEnabled&&(user.isAdmin||user.isApprover)&&<section className="dashboard-action-strip">
     <div className="dashboard-action-icon"><CreditCard size={18}/></div>
     <div className="min-w-0 flex-1"><p className="text-sm font-bold text-slate-900">Payment runs</p><p className="text-xs text-slate-500">Review approved expenses ready for payment.</p></div>
     <Link href="/dashboard/payments" className="secondary-button dashboard-action-button">Open payment runs <ArrowUpRight size={15}/></Link>

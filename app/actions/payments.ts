@@ -9,10 +9,12 @@ import { recordAuditEvent } from '@/lib/audit';
 import { acquireWiseBatchLease, releaseWiseBatchLease, addExpensesToOpenWiseBatch, createWisePaymentRunForUser } from '@/lib/wise-batch';
 import { requireUser } from './shared';
 import { notify, renderEmail } from '@/lib/notify';
+import { isWiseEnabled } from '@/lib/app-settings';
 
 export async function createWisePaymentRun() {
   const user = await requireUser();
   if (!user.isAdmin && !user.isApprover) throw new Error('Only approvers or admins can create payment runs.');
+  if (!(await isWiseEnabled())) throw new Error('Wise payment automation is currently turned off by an administrator.');
   if (!isWiseConfigured()) throw new Error('Wise is not configured. Add WISE_API_TOKEN and WISE_PROFILE_ID first.');
 
   const approverEmail = (user.email ?? '').toLowerCase();

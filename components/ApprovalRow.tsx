@@ -13,7 +13,7 @@ export default function ApprovalRow({ expense, isAdmin }: { expense: { id:string
   startTransition(async()=>{
    try{
     await decideExpense(expense.id,status,note);
-    setFeedback(status==='APPROVED' ? 'Expense approved successfully. It has been added to the payment process.' : 'Expense rejected successfully. The requester has been notified.');
+    setFeedback(status==='APPROVED' ? 'Expense approved successfully.' : 'Expense rejected successfully. The requester has been notified.');
    } catch (err) {
     setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
    } finally { setAction(null); }

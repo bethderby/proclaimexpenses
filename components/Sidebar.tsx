@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { Receipt, History, Inbox, BarChart3, Wallet, Users, LogOut, Menu, X, CreditCard, ListChecks } from 'lucide-react';
 
-export default function Sidebar({ name, email, isApprover, isAdmin, pendingCount }: { name: string; email: string; isApprover: boolean; isAdmin: boolean; pendingCount: number }) {
+export default function Sidebar({ name, email, isApprover, isAdmin, pendingCount, wiseEnabled }: { name: string; email: string; isApprover: boolean; isAdmin: boolean; pendingCount: number; wiseEnabled: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   useEffect(() => { setOpen(false); }, [pathname]);
@@ -19,7 +19,7 @@ export default function Sidebar({ name, email, isApprover, isAdmin, pendingCount
     
     { href: '/dashboard/expenses', label: 'Submit expense', icon: Receipt },
     { href: '/dashboard/expense-history', label: 'Expense History', icon: History },
-    ...(isApprover ? [{ href: '/dashboard/approvals', label: 'Approvals', icon: Inbox, badge: pendingCount }, { href: '/dashboard/payments', label: 'Payments', icon: CreditCard }] : []),
+    ...(isApprover ? [{ href: '/dashboard/approvals', label: 'Approvals', icon: Inbox, badge: pendingCount }, ...(wiseEnabled ? [{ href: '/dashboard/payments', label: 'Payments', icon: CreditCard }] : [])] : []),
     ...(isAdmin ? [{ href: '/dashboard/outstanding', label: 'Outstanding', icon: ListChecks }, { href: '/dashboard/reports', label: 'Reports', icon: BarChart3 }, { href: '/dashboard/teams', label: 'Admin Portal', icon: Users }] : []),
   ];
   return (

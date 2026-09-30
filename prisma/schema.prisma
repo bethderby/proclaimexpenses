@@ -119,6 +119,13 @@ enum SettlementStatus {
   ADDITIONAL_REIMBURSEMENT_REQUIRED
 }
 
+
+model AppSettings {
+  id          String   @id @default("default")
+  wiseEnabled Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+}
+
 model PaymentRun {
   id          String          @id @default(cuid())
   reference   String          @unique

@@ -7,6 +7,7 @@ import { PrepareWiseButton, PaymentRunActions } from './PaymentRunActions';
 import { decryptBankDetail } from '@/lib/bank';
 import DateRangeFilter from '@/components/DateRangeFilter';
 import PaymentRunFilter from '@/components/PaymentRunFilter';
+import { isWiseEnabled } from '@/lib/app-settings';
 
 const isoFirstOfMonth=()=>{const now=new Date();return new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10)};
 const isoToday=()=>new Date().toISOString().slice(0,10);
@@ -14,7 +15,7 @@ const runStatusLabel=(status:string)=>({DRAFT:'Draft',WISE_OPEN:'Open batch',WIS
 
 const money=(n:number)=>`£${n.toFixed(2)}`;
 export default async function PaymentsPage({searchParams}:{searchParams:{from?:string;to?:string;status?:string}}){
- const session=await getServerSession(authOptions); if(!session?.user) redirect('/login'); const user=session.user; if(!user.isAdmin&&!user.isApprover) redirect('/dashboard');
+ const session=await getServerSession(authOptions); if(!session?.user) redirect('/login'); const user=session.user; if(!user.isAdmin&&!user.isApprover) redirect('/dashboard'); if(!(await isWiseEnabled())) redirect('/dashboard');
  const readyWhere:Prisma.ExpenseWhereInput=user.isAdmin?{paymentStatus:'READY'}:{paymentStatus:'READY',team:{approverEmails:{has:(user.email??'').toLowerCase()}}};
  const from=searchParams.from||isoFirstOfMonth(),to=searchParams.to||isoToday();
  const fromDate=new Date(`${from}T00:00:00`),toDate=new Date(`${to}T23:59:59.999`);

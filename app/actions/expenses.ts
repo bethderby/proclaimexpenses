@@ -7,6 +7,7 @@ import { parseMoney, roundMoney, errorMessage } from '@/lib/money';
 import { recordAuditEvent } from '@/lib/audit';
 import { notify, renderEmail } from '@/lib/notify';
 import { isWiseConfigured } from '@/lib/wise';
+import { isWiseEnabled } from '@/lib/app-settings';
 import { autoCompleteWiseBatchIfApprovalsAreComplete } from '@/lib/wise-batch';
 import { requireUser, getTeamApproverEmails } from './shared';
 import { createWisePaymentRunForUser } from '@/lib/wise-batch';
@@ -177,16 +178,17 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
   if (expense.status !== 'PENDING') throw new Error('This expense has already been decided.');
   if (decision === 'APPROVED' && expense.purchaseStatus === 'ALREADY_PURCHASED' && !expense.receiptUrl) throw new Error('A receipt is required before an already-purchased expense can be approved.');
 
+  const wiseEnabled = await isWiseEnabled();
   let nextStatus: 'APPROVED' | 'READY_TO_PAY' = 'APPROVED';
   let paymentStatus: 'NOT_READY' | 'READY' = 'NOT_READY';
-  if (decision === 'APPROVED') {
+  if (decision === 'APPROVED' && wiseEnabled) {
     nextStatus = 'READY_TO_PAY';
     paymentStatus = 'READY';
   }
 
   await prisma.expense.update({ where: { id: expenseId }, data: { status: decision === 'REJECTED' ? 'REJECTED' : nextStatus, paymentStatus, approvedAmount: decision === 'APPROVED' ? expense.amount : null, decisionNote: note || null, decidedAt: new Date() } });
 
-  await recordAuditEvent({ actor: user, action: `EXPENSE_${decision}`, entityType: 'EXPENSE', entityId: expenseId, expenseId, teamId: expense.teamId, targetUserId: expense.userId, summary: `Expense ${decision === 'APPROVED' ? 'approved and made ready to pay' : 'rejected'}`, metadata: { decision, note: note || null, amount: expense.amount, relatedExpenseId: expense.relatedExpenseId } });
+  await recordAuditEvent({ actor: user, action: `EXPENSE_${decision}`, entityType: 'EXPENSE', entityId: expenseId, expenseId, teamId: expense.teamId, targetUserId: expense.userId, summary: `Expense ${decision === 'APPROVED' ? (wiseEnabled ? 'approved and made ready to pay' : 'approved; payment will be sent outside Wise') : 'rejected'}`, metadata: { decision, note: note || null, amount: expense.amount, relatedExpenseId: expense.relatedExpenseId, wiseEnabled } });
 
   // Once an approval makes the expense payable, immediately prepare the
   // current ready-to-pay set in Wise. This means the Wise batch is already
@@ -194,7 +196,7 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
   // manual "Prepare Wise payment run" step.
   let wisePreparedAutomatically = false;
   let wisePreparationError: string | null = null;
-  if (isWiseConfigured()) {
+  if (wiseEnabled && isWiseConfigured()) {
     try {
       if (decision === 'APPROVED' && paymentStatus === 'READY') {
         await createWisePaymentRunForUser(user.id, user.isAdmin, email);
@@ -223,7 +225,9 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
       const originalNote = decision === 'APPROVED'
         ? (wisePreparedAutomatically
           ? `You were advanced £${originalAdvance.toFixed(2)} but the receipt shows £${originalActual.toFixed(2)}. The extra £${extraAmount.toFixed(2)} was approved and has been added to a Wise payment run.`
-          : `You were advanced £${originalAdvance.toFixed(2)} but the receipt shows £${originalActual.toFixed(2)}. The extra £${extraAmount.toFixed(2)} was approved and is ready for payment. It will be prepared in Wise automatically when possible.`)
+          : wiseEnabled
+            ? `You were advanced £${originalAdvance.toFixed(2)} but the receipt shows £${originalActual.toFixed(2)}. The extra £${extraAmount.toFixed(2)} was approved and is ready for payment. It will be prepared in Wise automatically when possible.`
+            : `You were advanced £${originalAdvance.toFixed(2)} but the receipt shows £${originalActual.toFixed(2)}. The extra £${extraAmount.toFixed(2)} was approved. Payment will be sent.`)
         : `You were advanced £${originalAdvance.toFixed(2)} but the receipt shows £${originalActual.toFixed(2)}. The extra £${extraAmount.toFixed(2)} reimbursement was not approved.`;
       await prisma.expense.update({ where: { id: original.id }, data: { settlementNote: originalNote } });
     }
@@ -235,18 +239,24 @@ export async function decideExpense(expenseId: string, decision: 'APPROVED' | 'R
       ? (approved
         ? (wisePreparedAutomatically
           ? 'Your extra reimbursement has been approved and the payment batch has been prepared in Wise and is waiting there for funding/confirmation.'
-          : 'Your extra reimbursement has been approved and is ready for payment. If Wise preparation could not be completed automatically, it can be prepared from the Payments page.')
+          : wiseEnabled
+            ? 'Your extra reimbursement has been approved and is ready for payment. If Wise preparation could not be completed automatically, it can be prepared from the Payments page.'
+            : 'Your extra reimbursement has been approved. Payment will be sent.')
         : 'Your extra reimbursement was not approved. Please speak to your approver if you need more information.')
       : expense.purchaseStatus === 'NOT_PURCHASED' && expense.paymentTiming === 'ADVANCE' && approved
         ? (wisePreparedAutomatically
           ? 'Your advance has been approved and the payment batch has been prepared in Wise and is waiting there for funding/confirmation. You must upload the receipt after the purchase.'
-          : 'Your advance has been approved and is ready for payment. You must upload the receipt after the purchase.')
+          : wiseEnabled
+            ? 'Your advance has been approved and is ready for payment. You must upload the receipt after the purchase.'
+            : 'Your advance has been approved. Payment will be sent. You must upload the receipt after the purchase.')
         : approved
             ? (wisePreparedAutomatically
               ? 'Your reimbursement has been approved and the payment batch has been prepared in Wise and is waiting there for funding/confirmation.'
-              : wisePreparationError
-                ? 'Your reimbursement was approved, but the Wise batch could not be prepared automatically. It remains ready to pay and can be prepared from the Payments page.'
-                : 'It can now move to payment.')
+              : !wiseEnabled
+                ? 'Your reimbursement has been approved. Payment will be sent.'
+                : wisePreparationError
+                  ? 'Your reimbursement was approved, but the Wise batch could not be prepared automatically. It remains ready to pay and can be prepared from the Payments page.'
+                  : 'It can now move to payment.')
             : 'The approver did not approve this expense.';
     const { html, text } = renderEmail({
       heading: approved ? 'Your expense was approved' : 'Your expense was declined',
